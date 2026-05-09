@@ -1,5 +1,5 @@
-class ChatView  {
-  static Html(){
+class ChatView {
+  static Html() {
     return String.raw`
     <!DOCTYPE html>
 <html lang="en">
@@ -90,7 +90,7 @@ class ChatView  {
             margin: 10px 0;
             border-radius: 10px;
             background: #e7e7e7;
-            white-space: pre-wrap; /* This preserves line breaks */
+            white-space: pre-wrap;
         }
         .user-message {
             background: #0078d7;
@@ -100,6 +100,48 @@ class ChatView  {
         .ai-message {
             background: #58a700;
             color: #fff;
+        }
+        .code-block {
+            position: relative;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            padding-top: 35px;
+            margin: 10px 0;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            overflow-x: auto;
+            border: 1px solid #333;
+        }
+        .code-language-label {
+            position: absolute;
+            top: 5px;
+            left: 10px;
+            color: #888;
+            font-size: 11px;
+            font-family: Arial, sans-serif;
+            text-transform: uppercase;
+        }
+        .copy-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #0078d7;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+            z-index: 10;
+        }
+        .copy-button:hover {
+            background: #005a9e;
+        }
+        .copy-button.copied {
+            background: #58a700;
         }
         @media (max-width: 768px) {
             .container {
@@ -142,6 +184,148 @@ class ChatView  {
         let eventSource = null;
         let aiMessageDiv = null;
         let isGenerating = false;
+        let isAutoScrollLocked = true;
+        let aiFullContent = '';
+        
+        // Auto-scroll lock mechanism
+        const chatMessages = document.getElementById('chat-messages');
+        
+        chatMessages.addEventListener('scroll', function() {
+            const scrollBottom = chatMessages.scrollHeight - chatMessages.scrollTop - chatMessages.clientHeight;
+            const isAtBottom = scrollBottom < 30;
+            
+            if (isGenerating) {
+                if (isAtBottom && !isAutoScrollLocked) {
+                    isAutoScrollLocked = true;
+                } else if (!isAtBottom && isAutoScrollLocked) {
+                    isAutoScrollLocked = false;
+                }
+            }
+        });
+        
+        function scrollToBottom() {
+            requestAnimationFrame(function() {
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            });
+        }
+        
+        function detectAndFormatCode(text) {
+            const fragments = [];
+            let currentIndex = 0;
+            const backtick3 = '\x60\x60\x60';
+            
+            while (currentIndex < text.length) {
+                const codeBlockStart = text.indexOf(backtick3, currentIndex);
+                
+                if (codeBlockStart === -1) {
+                    if (currentIndex < text.length) {
+                        fragments.push({
+                            type: 'text',
+                            content: text.substring(currentIndex)
+                        });
+                    }
+                    break;
+                }
+                
+                if (codeBlockStart > currentIndex) {
+                    fragments.push({
+                        type: 'text',
+                        content: text.substring(currentIndex, codeBlockStart)
+                    });
+                }
+                
+                const lineEnd = text.indexOf('\n', codeBlockStart);
+                let language = '';
+                let codeStartIndex;
+                
+                if (lineEnd !== -1) {
+                    const possibleLang = text.substring(codeBlockStart + 3, lineEnd).trim();
+                    if (/^[a-zA-Z0-9#\-\+_.]*$/.test(possibleLang) && possibleLang.length < 30) {
+                        language = possibleLang;
+                        codeStartIndex = lineEnd + 1;
+                    } else {
+                        codeStartIndex = codeBlockStart + 3;
+                        if (text[codeStartIndex] === '\n') {
+                            codeStartIndex++;
+                        }
+                    }
+                } else {
+                    codeStartIndex = codeBlockStart + 3;
+                }
+                
+                const codeBlockEnd = text.indexOf(backtick3, codeStartIndex);
+                
+                if (codeBlockEnd === -1) {
+                    fragments.push({
+                        type: 'text',
+                        content: text.substring(codeBlockStart)
+                    });
+                    break;
+                }
+                
+                let codeContent = text.substring(codeStartIndex, codeBlockEnd);
+                
+                if (codeContent.endsWith('\n')) {
+                    codeContent = codeContent.slice(0, -1);
+                }
+                
+                fragments.push({
+                    type: 'code',
+                    language: language || 'code',
+                    content: codeContent
+                });
+                
+                currentIndex = codeBlockEnd + 3;
+                
+                if (currentIndex < text.length && text[currentIndex] === '\n') {
+                    currentIndex++;
+                }
+            }
+            
+            return fragments.length > 0 ? fragments : [{ type: 'text', content: text }];
+        }
+        
+        function renderMessageContent(messageDiv, content) {
+            messageDiv.innerHTML = '';
+            
+            const fragments = detectAndFormatCode(content);
+            
+            fragments.forEach(function(fragment) {
+                if (fragment.type === 'code') {
+                    const codeBlock = document.createElement('div');
+                    codeBlock.className = 'code-block';
+                    
+                    if (fragment.language) {
+                        const langLabel = document.createElement('div');
+                        langLabel.className = 'code-language-label';
+                        langLabel.textContent = fragment.language;
+                        codeBlock.appendChild(langLabel);
+                    }
+                    
+                    const copyButton = document.createElement('button');
+                    copyButton.className = 'copy-button';
+                    copyButton.textContent = 'Copy';
+                    copyButton.onclick = function() {
+                        navigator.clipboard.writeText(fragment.content).then(function() {
+                            copyButton.textContent = 'Copied!';
+                            copyButton.classList.add('copied');
+                            setTimeout(function() {
+                                copyButton.textContent = 'Copy';
+                                copyButton.classList.remove('copied');
+                            }, 2000);
+                        });
+                    };
+                    
+                    const codeContent = document.createTextNode(fragment.content);
+                    codeBlock.appendChild(copyButton);
+                    codeBlock.appendChild(codeContent);
+                    messageDiv.appendChild(codeBlock);
+                } else {
+                    const textNode = document.createTextNode(fragment.content);
+                    messageDiv.appendChild(textNode);
+                }
+            });
+        }
         
         function sendMessage() {
           if (isGenerating) return;
@@ -154,6 +338,8 @@ class ChatView  {
           input.value = '';
           input.disabled = true;
           isGenerating = true;
+          isAutoScrollLocked = true;
+          aiFullContent = '';
           
           if (eventSource) {
             eventSource.close();
@@ -164,25 +350,30 @@ class ChatView  {
             headers: {
               'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ message: message })
           })
-          .then(response => {
+          .then(function(response) {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             
-            function processStream({ done, value }) {
-              if (done) {
+            function processStream(result) {
+              if (result.done) {
                 isGenerating = false;
                 input.disabled = false;
                 input.focus();
                 aiMessageDiv = null;
+                aiFullContent = '';
+                if (isAutoScrollLocked) {
+                    scrollToBottom();
+                }
                 return;
               }
               
-              const chunk = decoder.decode(value, { stream: true });
+              const chunk = decoder.decode(result.value, { stream: true });
               const lines = chunk.split('\n\n');
               
-              for (const line of lines) {
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
                 if (line.startsWith('data: ')) {
                   const data = line.substring(6);
                   
@@ -191,15 +382,31 @@ class ChatView  {
                     input.disabled = false;
                     input.focus();
                     aiMessageDiv = null;
+                    aiFullContent = '';
+                    if (isAutoScrollLocked) {
+                        scrollToBottom();
+                    }
                     return;
                   }
                   
                   try {
                     const parsed = JSON.parse(data);
                     if (parsed.content) {
-                      // Convert escaped newlines back to actual newlines
                       const contentWithLineBreaks = parsed.content.replace(/\\n/g, '\n');
-                      appendMessage(contentWithLineBreaks, 'ai');
+                      aiFullContent += contentWithLineBreaks;
+                      
+                      if (aiMessageDiv) {
+                        renderMessageContent(aiMessageDiv, aiFullContent);
+                      } else {
+                        aiMessageDiv = document.createElement('div');
+                        aiMessageDiv.classList.add('message', 'ai-message');
+                        chatMessages.appendChild(aiMessageDiv);
+                        renderMessageContent(aiMessageDiv, aiFullContent);
+                      }
+                      
+                      if (isAutoScrollLocked) {
+                        scrollToBottom();
+                      }
                     }
                   } catch (e) {
                     console.error('Error parsing JSON:', e, 'Data:', data);
@@ -212,7 +419,7 @@ class ChatView  {
             
             return reader.read().then(processStream);
           })
-          .catch(error => {
+          .catch(function(error) {
             console.error('Error:', error);
             isGenerating = false;
             input.disabled = false;
@@ -224,29 +431,19 @@ class ChatView  {
           fetch('/reset', { method: 'POST' });
           document.getElementById('chat-messages').innerHTML = '';
           aiMessageDiv = null;
+          aiFullContent = '';
+          isAutoScrollLocked = true;
         }
         
         function appendMessage(text, sender) {
           const chatMessages = document.getElementById('chat-messages');
-          if (sender === 'ai') {
-            if (aiMessageDiv) {
-              // Append to existing AI message
-              aiMessageDiv.textContent += text;
-            } else {
-              // Create new AI message
-              aiMessageDiv = document.createElement('div');
-              aiMessageDiv.classList.add('message', 'ai-message');
-              aiMessageDiv.textContent = text;
-              chatMessages.appendChild(aiMessageDiv);
-            }
-          } else {
-            // Create user message
+          if (sender === 'user') {
             const msgDiv = document.createElement('div');
             msgDiv.classList.add('message', 'user-message');
             msgDiv.textContent = text;
             chatMessages.appendChild(msgDiv);
+            scrollToBottom();
           }
-          chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         
         function handleInput(event) {
@@ -256,12 +453,12 @@ class ChatView  {
           }
         }
         
-        window.onload = () => {
+        window.onload = function() {
           const input = document.getElementById('message-input');
           input.addEventListener('keydown', handleInput);
           input.focus();
         };
-        </script>
+    </script>
         
 </body>
 </html>
