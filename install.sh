@@ -456,84 +456,115 @@ install_debs() {
   fi
 }
 
-# Function to install .apk packages
+# Function to install .apk packages with recursive fallback
 install_apks() {
-  if [ -d "$APK_DIR" ]; then
-    # Get list of APK files
-    apk_files=$(find "$APK_DIR" -maxdepth 1 -name "*.apk" 2>/dev/null)
-    
-    if [ -n "$apk_files" ]; then
-      log_message "Found APK packages, testing installation..."
-      
-      # First installation attempt
-      log_message "First installation attempt..."
-      first_attempt_failed=false
-      
-      # Try to install each package individually and skip failures
-      for apk_file in $apk_files; do
-        pkg_name=$(basename "$apk_file")
-        log_message "Attempting to install: $pkg_name"
-        
-        if [ "$LOG_MODE" = true ]; then
-          if apk add --allow-untrusted "$apk_file"; then
-            log_message "✓ Successfully installed: $pkg_name"
-          else
-            log_message "✗ Failed to install: $pkg_name"
-            first_attempt_failed=true
-          fi
-        else
-          if apk add --allow-untrusted "$apk_file" > /dev/null 2>&1; then
-            log_message "✓ Installed: $pkg_name"
-          else
-            log_message "✗ Failed: $pkg_name"
-            first_attempt_failed=true
-          fi
-        fi
-      done
-      
-      # If first attempt had failures, try again
-      if [ "$first_attempt_failed" = true ]; then
-        log_message "Some packages failed on first attempt. Running second installation pass..."
-        
-        # Second attempt - try to install any remaining packages
-        # This often resolves dependency issues on Alpine
-        for apk_file in $apk_files; do
-          pkg_name=$(basename "$apk_file")
-          log_message "Second attempt for: $pkg_name"
-          
-          if [ "$LOG_MODE" = true ]; then
-            if apk add --allow-untrusted "$apk_file"; then
-              log_message "✓ Successfully installed on second attempt: $pkg_name"
-            else
-              log_message "✗ Still failed on second attempt: $pkg_name"
-            fi
-          else
-            if apk add --allow-untrusted "$apk_file" > /dev/null 2>&1; then
-              log_message "✓ Installed on second attempt: $pkg_name"
-            else
-              log_message "✗ Still failed: $pkg_name"
-            fi
-          fi
-        done
-        
-        log_message "Second installation pass completed."
-      fi
-      
-      # Update APK cache to ensure everything is properly registered
-      log_message "Updating APK cache..."
-      if [ "$LOG_MODE" = true ]; then
-        apk update > /dev/null 2>&1
-      else
-        apk update > /dev/null 2>&1
-      fi
-      
-      log_message "APK installation process completed."
-    else
-      log_message "No .apk files found in $APK_DIR. Skipping .apk installation."
-    fi
-  else
+  if [ ! -d "$APK_DIR" ]; then
     log_message "The .apk directory ($APK_DIR) does not exist. Skipping .apk installation."
+    return
   fi
+
+  # Get list of APK files
+  apk_files=$(find "$APK_DIR" -maxdepth 1 -name "*.apk" 2>/dev/null)
+  
+  if [ -z "$apk_files" ]; then
+    log_message "No .apk files found in $APK_DIR. Skipping .apk installation."
+    return
+  fi
+
+  log_message "Found APK packages, starting recursive installation..."
+  
+  # Initialize counters and tracking
+  attempt=0
+  max_attempts=10  # Safety limit to prevent infinite loops
+  
+  # Create a temporary file to track failed packages
+  failed_list=$(mktemp)
+  current_list=$(mktemp)
+  
+  # Initial list of all packages to try
+  echo "$apk_files" > "$current_list"
+  
+  while [ $attempt -lt $max_attempts ]; do
+    attempt=$((attempt + 1))
+    
+    # Clear the failed list for this attempt
+    > "$failed_list"
+    
+    # Count packages to try
+    pkg_count=$(wc -l < "$current_list")
+    
+    if [ $pkg_count -eq 0 ]; then
+      log_message "No more packages to install. All packages installed successfully!"
+      break
+    fi
+    
+    log_message "Installation attempt $attempt: Processing $pkg_count package(s)..."
+    
+    # Try to install each package
+    failed_any=false
+    while IFS= read -r apk_file; do
+      [ -z "$apk_file" ] && continue
+      
+      pkg_name=$(basename "$apk_file")
+      
+      if [ "$LOG_MODE" = true ]; then
+        if apk add --allow-untrusted "$apk_file" 2>&1 | tee -a "$LOG_FILE"; then
+          log_message "✓ Successfully installed: $pkg_name"
+        else
+          log_message "✗ Failed to install: $pkg_name (will retry)"
+          echo "$apk_file" >> "$failed_list"
+          failed_any=true
+        fi
+      else
+        if apk add --allow-untrusted "$apk_file" > /dev/null 2>&1; then
+          log_message "✓ Installed: $pkg_name"
+        else
+          log_message "✗ Failed: $pkg_name (will retry)"
+          echo "$apk_file" >> "$failed_list"
+          failed_any=true
+        fi
+      fi
+    done < "$current_list"
+    
+    # Check if any packages failed
+    if [ "$failed_any" = false ]; then
+      log_message "All packages installed successfully in attempt $attempt!"
+      break
+    fi
+    
+    # Check if we're making progress
+    failed_count=$(wc -l < "$failed_list")
+    if [ $failed_count -eq $pkg_count ]; then
+      # No progress made - all packages failed
+      if [ $attempt -ge 2 ]; then
+        log_message "Warning: No progress made in attempt $attempt. Stopping recursive installation."
+        log_message "Failed packages ($failed_count):"
+        while IFS= read -r apk_file; do
+          [ -z "$apk_file" ] && continue
+          log_message "  - $(basename "$apk_file")"
+        done < "$failed_list"
+        break
+      fi
+    fi
+    
+    # Update the current list with failed packages for next attempt
+    cp "$failed_list" "$current_list"
+    
+    # Update APK cache between attempts (helps resolve dependency issues)
+    log_message "Updating APK cache before next attempt..."
+    apk update > /dev/null 2>&1
+    
+    log_message "Moving to attempt $((attempt + 1)) with $failed_count remaining package(s)..."
+  done
+  
+  # Final APK cache update
+  log_message "Updating APK cache..."
+  apk update > /dev/null 2>&1
+  
+  # Clean up temporary files
+  rm -f "$failed_list" "$current_list"
+  
+  log_message "APK installation process completed."
 }
 
 # Function to build find exclude pattern from EXCLUDE_DIRS
