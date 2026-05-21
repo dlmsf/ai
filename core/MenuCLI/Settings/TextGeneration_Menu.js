@@ -3,6 +3,7 @@ import ColorText from '../../useful/ColorText.js'
 import MenuCLI from "../MenuCLI.js"
 import SettingsMenu from "./SettingsMenu.js"
 import LlamaCPP_Menu from "./LlamaCPP_Menu.js"
+import DeepInfra from "../../DeepInfra.js"
 
 const TextGeneration_Menu = () => ({
     title : `• Settings / TextGeneration`,
@@ -87,12 +88,7 @@ options : [
                         break;
         
                         case `Model (${ColorText.cyan(actual.model)})`:
-                            actual.model = await MenuCLI.ask('Select the model',{options : [
-                                'Qwen/Qwen3-235B-A22B-Instruct-2507',
-                                'deepseek-ai/DeepSeek-V3.2',
-                                'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                                'zai-org/GLM-4.7-Flash'
-                            ]})
+                            actual.model = await MenuCLI.ask('Select the model',{options : DeepInfra.Models})
                             ConfigManager.setKey('deepinfra',actual)
                             MenuCLI.displayMenu(TextGeneration_Menu)
                             break;
@@ -109,12 +105,7 @@ options : [
                 } else {
                     let final_object = {}
                     final_object.token = await MenuCLI.ask('DeepInfra Token : ')
-                    final_object.model = await MenuCLI.ask('Select the model',{options : [
-                        'Qwen/Qwen3-235B-A22B-Instruct-2507',
-                        'deepseek-ai/DeepSeek-V3.2',
-                        'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                        'zai-org/GLM-4.7-Flash'
-                    ]})
+                    final_object.model = await MenuCLI.ask('Select the model',{options : DeepInfra.Models})
                     ConfigManager.setKey('deepinfra',final_object)
                     MenuCLI.displayMenu(TextGeneration_Menu)
                 }

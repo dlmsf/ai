@@ -7,6 +7,7 @@ import ServerSaves from "../MenuCLI/ServerSaves.js"
 import ColorText from '../useful/ColorText.js'
 import ConfigManager from "../ConfigManager.js"
 import FreePort from "../useful/FreePort.js"
+import DeepInfra from "../DeepInfra.js"
 
 let webgpt_process_name
 let ai_process_name
@@ -118,12 +119,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
             } else if(toload.toLowerCase() == 'deepinfra'){
                 final_object.token = await cli.ask('DeepInfra Token: ')
                 final_object.model = await cli.ask('Select the model', {
-                    options: [
-                        'deepseek-ai/DeepSeek-V3.2',
-                        'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                        'Qwen/Qwen3-235B-A22B-Instruct-2507',
-                        'zai-org/GLM-4.7-Flash'
-                    ]
+                    options: DeepInfra.Models
                 })
                 let save = await cli.ask('Save the DeepInfra config? ', {
                     options: ['yes', 'no']

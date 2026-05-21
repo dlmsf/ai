@@ -94,6 +94,13 @@ class DeepInfra {
         this.Log = config.log || false;
     }
 
+    static Models = [
+        'deepseek-ai/DeepSeek-V3.2',
+        'meta-llama/Meta-Llama-3.1-8B-Instruct',
+        'Qwen/Qwen3-235B-A22B-Instruct-2507',
+        'zai-org/GLM-4.7-Flash'
+    ]
+
     /**
      * Handles fallback streaming when API fails
      * @private

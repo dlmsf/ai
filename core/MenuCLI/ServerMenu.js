@@ -6,6 +6,7 @@ import ModelsList from './ModelsList.js'
 import ColorText from '../useful/ColorText.js'
 import ConfigManager from '../ConfigManager.js'
 import PM2 from '../useful/PM2.js'
+import DeepInfra from '../DeepInfra.js'
 
 let easyai_config = {}
 let easyai_token = undefined
@@ -407,12 +408,7 @@ options : [
                             break
                             
                         case 'Change model':
-                            let newModel = await MenuCLI.ask('Select the model', {options : [
-                                'Qwen/Qwen3-235B-A22B-Instruct-2507',
-                                'deepseek-ai/DeepSeek-V3.2',
-                                'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                                'zai-org/GLM-4.7-Flash'
-                            ]})
+                            let newModel = await MenuCLI.ask('Select the model', {options : DeepInfra.Models})
                             obj.model = newModel
                             ConfigManager.setKey('deepinfra', obj)
                             easyai_config.deepinfra_token = obj.token
@@ -455,12 +451,7 @@ options : [
                 } else {
                     let final_object = {}
                     final_object.token = await MenuCLI.ask('DeepInfra Token : ')
-                    final_object.model = await MenuCLI.ask('Select the model',{options : [
-                        'Qwen/Qwen3-235B-A22B-Instruct-2507',
-                        'deepseek-ai/DeepSeek-V3.2',
-                        'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                        'zai-org/GLM-4.7-Flash'
-                    ]})
+                    final_object.model = await MenuCLI.ask('Select the model',{options : DeepInfra.Models})
                     if(await MenuCLI.ask('Save key and model?',{options : ['yes','no']}) == 'yes'){
                         ConfigManager.setKey('deepinfra',final_object)
                     }
