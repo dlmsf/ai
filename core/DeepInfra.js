@@ -95,8 +95,10 @@ class DeepInfra {
     }
 
     static Models = [
+        'deepseek-ai/DeepSeek-V4-Flash',
         'deepseek-ai/DeepSeek-V3.2',
         'meta-llama/Meta-Llama-3.1-8B-Instruct',
+        'deepseek-ai/DeepSeek-V4-Pro',
         'Qwen/Qwen3-235B-A22B-Instruct-2507',
         'zai-org/GLM-4.7-Flash'
     ]
