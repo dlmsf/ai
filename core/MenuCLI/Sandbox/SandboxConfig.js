@@ -3,6 +3,7 @@ import MenuCLI from '../MenuCLI.js'
 import SandboxMenu from './SandboxMenu.js'
 import ConfigManager from '../../ConfigManager.js'
 import ColorText from '../../useful/ColorText.js'
+import DeepInfra from '../../DeepInfra.js'
 
 let instance_config = {server_url : 'localhost',server_port : 4000}
 
@@ -176,12 +177,7 @@ options : [
                         break
                         
                     case 'Change model':
-                        let newModel = await MenuCLI.ask('Select the model', {options : [
-                            'Qwen/Qwen3-235B-A22B-Instruct-2507',
-                            'deepseek-ai/DeepSeek-V3.2',
-                            'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                            'zai-org/GLM-4.7-Flash'
-                        ]})
+                        let newModel = await MenuCLI.ask('Select the model', {options : DeepInfra.Models})
                         obj.model = newModel
                         ConfigManager.setKey('deepinfra', obj)
                         instance_config.deepinfra_token = obj.token
@@ -220,12 +216,7 @@ options : [
             } else {
                 let final_object = {}
                 final_object.token = await MenuCLI.ask('DeepInfra Token : ')
-                final_object.model = await MenuCLI.ask('Select the model',{options : [
-                    'Qwen/Qwen3-235B-A22B-Instruct-2507',
-                    'deepseek-ai/DeepSeek-V3.2',
-                    'meta-llama/Meta-Llama-3.1-8B-Instruct',
-                    'zai-org/GLM-4.7-Flash'
-                ]})
+                final_object.model = await MenuCLI.ask('Select the model',{options : DeepInfra.Models})
                 if(await MenuCLI.ask('Save key and model?',{options : ['yes','no']}) == 'yes'){ConfigManager.setKey('deepinfra',final_object)}
                 instance_config.deepinfra_token = final_object.token
                 instance_config.deepinfra_model = final_object.model
