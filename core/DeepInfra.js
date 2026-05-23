@@ -95,6 +95,7 @@ class DeepInfra {
     }
 
     static Models = [
+        'meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo',
         'deepseek-ai/DeepSeek-V4-Flash',
         'deepseek-ai/DeepSeek-V3.2',
         'meta-llama/Meta-Llama-3.1-8B-Instruct',
