@@ -1373,33 +1373,31 @@ load_files_from_commit() {
                     total_commits=$(git rev-list --all --count 2>/dev/null || echo 0)
                     current=0
                     
-                    # Get ALL commit info with CORRECT total sizes
+                                        # Get ALL commit info with CORRECT total sizes
                     git log --all --format="%H|%ai|%s" 2>/dev/null | while IFS='|' read -r hash date msg; do
                         [ -z "$hash" ] && continue
                         
-                        # Calculate TOTAL size of all files in this commit
-                        commit_size=$(git diff-tree -r -l "$hash" 2>/dev/null | awk '{
-                            for(i=1;i<=NF;i++) {
-                                if($i ~ /^[0-9]+$/ && $(i-1) ~ /^[MADRC][0-9]*$/) {
-                                    sum += $i
-                                }
+                        # Calculate TOTAL size of all files in this commit using cat-file for accuracy
+                        commit_size=$(git ls-tree -r -l "$hash" 2>/dev/null | awk '{
+                            # Use the object size field directly from ls-tree -l output
+                            # ls-tree -l format: mode SP type SP object SP size TAB filename
+                            if ($4 ~ /^[0-9]+$/) {
+                                sum += $4
                             }
                         } END { print sum+0 }')
                         
-                        # If diff-tree didn't work, fall back to summing all blob sizes
+                        # Fallback to summing blobs if ls-tree -l fails
                         if [ "$commit_size" = "0" ] || [ -z "$commit_size" ]; then
-                            commit_size=$(git ls-tree -r -l "$hash" 2>/dev/null | awk '{
-                                for(i=1;i<=NF;i++) {
-                                    if($i ~ /^[0-9]+$/ && i > 3) {
-                                        sum += $i
-                                        break
-                                    }
-                                }
-                            } END { print sum+0 }')
+                            commit_size=$(git ls-tree -r "$hash" 2>/dev/null | while read -r mode type hash filename; do
+                                if [ "$type" = "blob" ]; then
+                                    git cat-file -s "$hash" 2>/dev/null || echo 0
+                                fi
+                            done | awk '{sum+=$1} END {print sum+0}')
                         fi
                         
                         [ -z "$commit_size" ] && commit_size=0
-                        
+
+
                         # Check if message is a version (only numbers and dots)
                         is_version=" "
                         case "$msg" in
@@ -1513,7 +1511,7 @@ load_files_from_commit() {
                     line_num=0
                     counter=1
                     > "/tmp/build_commit_map_$$.txt"
-                    while IFS='|' read -r csize hash date msg is_version; do
+                        while IFS='|' read -r csize hash date msg is_version; do
                         line_num=$((line_num + 1))
                         [ "$line_num" -lt "$start_line" ] && continue
                         [ "$line_num" -gt "$end_line" ] && break
@@ -1528,7 +1526,7 @@ load_files_from_commit() {
                             marker=" << SELECTED"
                         fi
                         
-                        printf "  %2s. %s %s %s%s\n" "$counter" "$short_hash" "$date" "$shortened_msg" "$marker"
+                        printf "  %2s. %8s %s %s %s%s\n" "$counter" "$size_display" "$short_hash" "$date" "$shortened_msg" "$marker"
                         echo "${counter}|${hash}|${msg}" >> "/tmp/build_commit_map_$$.txt"
                         counter=$((counter + 1))
                     done < "$FILTERED_COMMITS"
