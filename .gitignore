@@ -20,3 +20,4 @@ build
 logs
 *.part
 *.tmp
+buildsaves.cfg
