@@ -513,100 +513,169 @@ build_config_interface() {
     
     echo "Loading files..."
     
-    # Function to load files from a specific commit
-    load_files_from_commit() {
-        commit="$1"
-        > "$BUILD_FILES_LIST"
-        > "$BUILD_DIRS_LIST"
+     # Function to load files from a specific commit
+load_files_from_commit() {
+    commit="$1"
+    > "$BUILD_FILES_LIST"
+    > "$BUILD_DIRS_LIST"
+    
+    if [ -z "$commit" ]; then
+        # Use current working tree - much faster
+        # Build files list
+        git ls-files -z 2>/dev/null | xargs -0 -I{} sh -c '
+            if [ -f "$1" ]; then
+                size=$(wc -c < "$1" 2>/dev/null || echo 0)
+            else
+                size=0
+            fi
+            case "$1" in
+                *.js|*.sh|*.py|*.rb|*.php|*.ts|*.jsx|*.tsx|*.css|*.html|*.json|*.xml|*.yml|*.yaml|*.md|*.txt|*.conf|*.cfg|*.ini)
+                    printf "%s|%s|C\n" "$size" "$1" ;;
+                *)
+                    printf "%s|%s|D\n" "$size" "$1" ;;
+            esac
+        ' _ {} 2>/dev/null | sort -t'|' -k1 -n -r > "$BUILD_FILES_LIST"
         
-        if [ -z "$commit" ]; then
-            # Use current working tree - much faster
-            git ls-files -z 2>/dev/null | xargs -0 -I{} sh -c '
-                if [ -f "$1" ]; then
-                    size=$(wc -c < "$1" 2>/dev/null || echo 0)
-                else
-                    size=0
-                fi
-                case "$1" in
-                    *.js|*.sh|*.py|*.rb|*.php|*.ts|*.jsx|*.tsx|*.css|*.html|*.json|*.xml|*.yml|*.yaml|*.md|*.txt|*.conf|*.cfg|*.ini)
-                        printf "%s|%s|C\n" "$size" "$1" ;;
-                    *)
-                        printf "%s|%s|D\n" "$size" "$1" ;;
+        # Build directories list from the files list to ensure consistency
+        TEMP_DIRS="/tmp/build_dirs_temp_$$.txt"
+        > "$TEMP_DIRS"
+        
+        # Extract all unique directories from the files list
+        while IFS='|' read -r size filename filetype; do
+            [ -z "$filename" ] && continue
+            dirname "$filename" 2>/dev/null
+        done < "$BUILD_FILES_LIST" | sort -u > "$TEMP_DIRS"
+        
+        # First pass: count how many top-level directories we have
+        top_level_dirs=0
+        while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            [ "$dir" = "." ] && continue
+            case "$dir" in
+                */*) ;;
+                *) top_level_dirs=$((top_level_dirs + 1)) ;;
+            esac
+        done < "$TEMP_DIRS"
+        
+        # Second pass: calculate sizes for each directory
+        while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            [ "$dir" = "." ] && continue
+            
+            # SKIP: If there's only one top-level directory and this is it, don't show it
+            if [ "$top_level_dirs" -eq 1 ]; then
+                case "$dir" in
+                    */*) ;;
+                    *) continue ;;
                 esac
-            ' _ {} 2>/dev/null | sort -t'|' -k1 -n -r > "$BUILD_FILES_LIST"
-            
-            # Get all directories
-            git ls-files -z 2>/dev/null | xargs -0 -I{} dirname "{}" 2>/dev/null | sort -u | while IFS= read -r dir; do
-                [ -z "$dir" ] && continue
-                [ "$dir" = "." ] && continue
-                # Calculate total size of files in this directory
-                dir_size=$(find "$dir" -maxdepth 1 -type f -exec wc -c {} + 2>/dev/null | tail -1 | awk '{print $1}')
-                [ -z "$dir_size" ] && dir_size=0
-                file_count=$(find "$dir" -maxdepth 1 -type f 2>/dev/null | wc -l)
-                echo "${dir_size}|${dir}|${file_count}" >> "$BUILD_DIRS_LIST"
-            done
-            
-            # Sort directories by size
-            if [ -s "$BUILD_DIRS_LIST" ]; then
-                sort -t'|' -k1 -n -r "$BUILD_DIRS_LIST" > "${BUILD_DIRS_LIST}.sorted"
-                mv "${BUILD_DIRS_LIST}.sorted" "$BUILD_DIRS_LIST"
-            fi
-        else
-            # Use files from specific commit
-            git ls-tree -r -l "$commit" 2>/dev/null | while IFS=' ' read -r mode type hash rest; do
-                # Extract size and filename using awk for better parsing
-                size=$(echo "$rest" | awk '{print $1}')
-                filename=$(echo "$rest" | cut -d' ' -f2-)
-                
-                # If size is "-" or empty (submodules, etc.), set to 0
-                if [ "$size" = "-" ] || [ -z "$size" ]; then
-                    size=0
-                fi
-                
-                [ -z "$filename" ] && continue
-                
-                case "$filename" in
-                    *.js|*.sh|*.py|*.rb|*.php|*.ts|*.jsx|*.tsx|*.css|*.html|*.json|*.xml|*.yml|*.yaml|*.md|*.txt|*.conf|*.cfg|*.ini)
-                        file_type="C"
-                        ;;
-                    *)
-                        file_type="D"
-                        ;;
-                esac
-                
-                echo "${size}|${filename}|${file_type}" >> "$BUILD_FILES_LIST"
-                
-                # Collect directories
-                dirname "$filename" 2>/dev/null >> "/tmp/build_dirs_raw_$$.txt"
-            done
-            
-            # Sort files by size numerically (largest first)
-            if [ -s "$BUILD_FILES_LIST" ]; then
-                sort -t'|' -k1 -n -r "$BUILD_FILES_LIST" > "${BUILD_FILES_LIST}.sorted"
-                mv "${BUILD_FILES_LIST}.sorted" "$BUILD_FILES_LIST"
             fi
             
-            # Process directories
-            if [ -f "/tmp/build_dirs_raw_$$.txt" ]; then
-                sort -u "/tmp/build_dirs_raw_$$.txt" | while IFS= read -r dir; do
-                    [ -z "$dir" ] && continue
-                    [ "$dir" = "." ] && continue
-                    # Count files and total size for this directory from BUILD_FILES_LIST
-                    dir_info=$(grep "|${dir}/" "$BUILD_FILES_LIST" 2>/dev/null | awk -F'|' '{sum+=$1; count++} END {printf "%d|%d", sum+0, count+0}')
-                    dir_size=$(echo "$dir_info" | cut -d'|' -f1)
-                    file_count=$(echo "$dir_info" | cut -d'|' -f2)
-                    echo "${dir_size}|${dir}|${file_count}" >> "$BUILD_DIRS_LIST"
-                done
-                
-                if [ -s "$BUILD_DIRS_LIST" ]; then
-                    sort -t'|' -k1 -n -r "$BUILD_DIRS_LIST" > "${BUILD_DIRS_LIST}.sorted"
-                    mv "${BUILD_DIRS_LIST}.sorted" "$BUILD_DIRS_LIST"
-                fi
-                
-                rm -f "/tmp/build_dirs_raw_$$.txt"
-            fi
+            # Calculate total size and file count from BUILD_FILES_LIST
+            dir_info=$(grep "|${dir}/" "$BUILD_FILES_LIST" 2>/dev/null | awk -F'|' '{sum+=$1; count++} END {printf "%d|%d", sum+0, count+0}')
+            dir_size=$(echo "$dir_info" | cut -d'|' -f1)
+            file_count=$(echo "$dir_info" | cut -d'|' -f2)
+            echo "${dir_size}|${dir}|${file_count}" >> "$BUILD_DIRS_LIST"
+        done < "$TEMP_DIRS"
+        
+        # Sort directories by size
+        if [ -s "$BUILD_DIRS_LIST" ]; then
+            sort -t'|' -k1 -n -r "$BUILD_DIRS_LIST" > "${BUILD_DIRS_LIST}.sorted"
+            mv "${BUILD_DIRS_LIST}.sorted" "$BUILD_DIRS_LIST"
         fi
-    }
+        
+        rm -f "$TEMP_DIRS"
+    else
+        # Use files from specific commit - FIXED VERSION
+        TEMP_FILES="/tmp/build_files_temp_$$.txt"
+        > "$TEMP_FILES"
+        
+        # Get file list from the specific commit
+        # Method: use git ls-tree to get all blob objects, then get their sizes
+        git ls-tree -r "$commit" 2>/dev/null | while read -r mode type hash filename; do
+            # Only process blobs (files), skip trees and submodules
+            [ "$type" != "blob" ] && continue
+            [ -z "$filename" ] && continue
+            
+            # Get the actual file size using git cat-file
+            size=$(git cat-file -s "$hash" 2>/dev/null || echo 0)
+            
+            # Validate size is a number
+            case "$size" in
+                ''|*[!0-9]*) size=0 ;;
+            esac
+            
+            # Determine file type based on extension
+            case "$filename" in
+                *.js|*.sh|*.py|*.rb|*.php|*.ts|*.jsx|*.tsx|*.css|*.html|*.json|*.xml|*.yml|*.yaml|*.md|*.txt|*.conf|*.cfg|*.ini)
+                    file_type="C"
+                    ;;
+                *)
+                    file_type="D"
+                    ;;
+            esac
+            
+            echo "${size}|${filename}|${file_type}" >> "$TEMP_FILES"
+        done
+        
+        # Sort files by size (largest first)
+        if [ -s "$TEMP_FILES" ]; then
+            sort -t'|' -k1 -n -r "$TEMP_FILES" > "$BUILD_FILES_LIST"
+        else
+            # If no files were found, create empty files
+            > "$BUILD_FILES_LIST"
+        fi
+        rm -f "$TEMP_FILES"
+        
+        # Build directories list from the files list
+        TEMP_DIRS="/tmp/build_dirs_temp_$$.txt"
+        > "$TEMP_DIRS"
+        
+        # Extract all unique directories from the files list
+        while IFS='|' read -r size filename filetype; do
+            [ -z "$filename" ] && continue
+            dirname "$filename" 2>/dev/null
+        done < "$BUILD_FILES_LIST" | sort -u > "$TEMP_DIRS"
+        
+        # First pass: count how many top-level directories we have
+        top_level_dirs=0
+        while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            [ "$dir" = "." ] && continue
+            case "$dir" in
+                */*) ;;
+                *) top_level_dirs=$((top_level_dirs + 1)) ;;
+            esac
+        done < "$TEMP_DIRS"
+        
+        # Second pass: calculate sizes for each directory
+        while IFS= read -r dir; do
+            [ -z "$dir" ] && continue
+            [ "$dir" = "." ] && continue
+            
+            # SKIP: If there's only one top-level directory and this is it, don't show it
+            if [ "$top_level_dirs" -eq 1 ]; then
+                case "$dir" in
+                    */*) ;;
+                    *) continue ;;
+                esac
+            fi
+            
+            # Calculate total size and file count from BUILD_FILES_LIST
+            dir_info=$(grep "|${dir}/" "$BUILD_FILES_LIST" 2>/dev/null | awk -F'|' '{sum+=$1; count++} END {printf "%d|%d", sum+0, count+0}')
+            dir_size=$(echo "$dir_info" | cut -d'|' -f1)
+            file_count=$(echo "$dir_info" | cut -d'|' -f2)
+            echo "${dir_size}|${dir}|${file_count}" >> "$BUILD_DIRS_LIST"
+        done < "$TEMP_DIRS"
+        
+        # Sort directories by size
+        if [ -s "$BUILD_DIRS_LIST" ]; then
+            sort -t'|' -k1 -n -r "$BUILD_DIRS_LIST" > "${BUILD_DIRS_LIST}.sorted"
+            mv "${BUILD_DIRS_LIST}.sorted" "$BUILD_DIRS_LIST"
+        fi
+        
+        rm -f "$TEMP_DIRS"
+    fi
+}
     
     # Load current files
     load_files_from_commit ""
@@ -738,7 +807,7 @@ build_config_interface() {
         read action
         
         case "$action" in
-            1)
+                        1)
                 # Browse directories to exclude
                 current_page=1
                 ITEMS_PER_PAGE=5
@@ -747,18 +816,101 @@ build_config_interface() {
                     AVAILABLE_DIRS="/tmp/build_available_dirs_$$.txt"
                     > "$AVAILABLE_DIRS"
                     
+                    # Build a set of all excluded files (both directly excluded and via excluded dirs)
+                    EXCLUDED_FILES_SET="/tmp/build_excluded_files_set_$$.txt"
+                    > "$EXCLUDED_FILES_SET"
+                    
+                    # Add directly excluded files
+                    if [ -s "$EXCLUDE_LIST" ]; then
+                        while IFS= read -r f; do
+                            [ -z "$f" ] && continue
+                            echo "$f" >> "$EXCLUDED_FILES_SET"
+                        done < "$EXCLUDE_LIST"
+                    fi
+                    
+                    # Add files that fall under excluded directories
+                    if [ -s "$EXCLUDE_DIRS_LIST" ]; then
+                        while IFS='|' read -r fsize fname ftype; do
+                            [ -z "$fname" ] && continue
+                            while IFS= read -r excluded_dir; do
+                                [ -z "$excluded_dir" ] && continue
+                                case "$fname" in
+                                    ${excluded_dir}/*|${excluded_dir})
+                                        echo "$fname" >> "$EXCLUDED_FILES_SET"
+                                        break
+                                        ;;
+                                esac
+                            done < "$EXCLUDE_DIRS_LIST"
+                        done < "$BUILD_FILES_LIST"
+                    fi
+                    
+                    # Deduplicate excluded files set
+                    if [ -s "$EXCLUDED_FILES_SET" ]; then
+                        sort -u "$EXCLUDED_FILES_SET" > "${EXCLUDED_FILES_SET}.sorted"
+                        mv "${EXCLUDED_FILES_SET}.sorted" "$EXCLUDED_FILES_SET"
+                    fi
+                    
+                    # Process each directory from BUILD_DIRS_LIST
                     while IFS='|' read -r dir_size dir_name file_count; do
                         [ -z "$dir_name" ] && continue
-                        if ! grep -q "^${dir_name}$" "$EXCLUDE_DIRS_LIST" 2>/dev/null; then
-                            echo "${dir_size}|${dir_name}|${file_count}" >> "$AVAILABLE_DIRS"
+                        
+                        # Skip if this directory itself is already excluded
+                        if grep -q "^${dir_name}$" "$EXCLUDE_DIRS_LIST" 2>/dev/null; then
+                            continue
                         fi
-                    done < "$BUILD_DIRS_LIST"
+                        
+                        # Skip if any parent directory is already excluded
+                        parent_excluded=false
+                        if [ -s "$EXCLUDE_DIRS_LIST" ]; then
+                            while IFS= read -r excluded_dir; do
+                                [ -z "$excluded_dir" ] && continue
+                                case "$dir_name" in
+                                    ${excluded_dir}/*)
+                                        parent_excluded=true
+                                        break
+                                        ;;
+                                esac
+                            done < "$EXCLUDE_DIRS_LIST"
+                        fi
+                        
+                        if [ "$parent_excluded" = true ]; then
+                            continue
+                        fi
+                        
+                        # Calculate actual size and file count by subtracting excluded files
+                        actual_size=0
+                        actual_count=0
+                        
+                        while IFS='|' read -r fsize fname ftype; do
+                            [ -z "$fname" ] && continue
+                            case "$fname" in
+                                ${dir_name}/*|${dir_name})
+                                    # Check if this file is already excluded
+                                    if ! grep -q "^${fname}$" "$EXCLUDED_FILES_SET" 2>/dev/null; then
+                                        actual_size=$((actual_size + fsize))
+                                        actual_count=$((actual_count + 1))
+                                    fi
+                                    ;;
+                            esac
+                        done < "$BUILD_FILES_LIST"
+                        
+                        # Only show directory if it still has files after exclusions
+                        if [ "$actual_count" -gt 0 ]; then
+                            echo "${actual_size}|${dir_name}|${actual_count}" >> "$AVAILABLE_DIRS"
+                        fi
+                                        done < "$BUILD_DIRS_LIST"
+                    
+                    # Sort available directories by size (largest first) to reflect updated sizes
+                    if [ -s "$AVAILABLE_DIRS" ]; then
+                        sort -t'|' -k1 -n -r "$AVAILABLE_DIRS" > "${AVAILABLE_DIRS}.sorted"
+                        mv "${AVAILABLE_DIRS}.sorted" "$AVAILABLE_DIRS"
+                    fi
                     
                     total_items=$(wc -l < "$AVAILABLE_DIRS")
                     
                     if [ "$total_items" -eq 0 ]; then
                         echo ""
-                        echo "  All directories are already excluded!"
+                        echo "  All directories are already excluded or empty!"
                         sleep 1
                         break
                     fi
@@ -799,6 +951,7 @@ build_config_interface() {
                             if echo "$cmd" | grep -q '^[0-9]\+$'; then
                                 line_num=0
                                 counter=1
+                                selected_dir=""
                                 while IFS='|' read -r dir_size dir_name file_count; do
                                     line_num=$((line_num + 1))
                                     [ "$line_num" -lt "$start_line" ] && continue
@@ -806,35 +959,65 @@ build_config_interface() {
                                     [ -z "$dir_name" ] && continue
                                     
                                     if [ "$counter" = "$cmd" ]; then
-                                        if ! grep -q "^${dir_name}$" "$EXCLUDE_DIRS_LIST" 2>/dev/null; then
-                                            echo "$dir_name" >> "$EXCLUDE_DIRS_LIST"
-                                            # Also add all files in this directory to the exclude list automatically
-                                            while IFS='|' read -r sz fn ft; do
-                                                [ -z "$fn" ] && continue
-                                                case "$fn" in
-                                                    ${dir_name}/*|${dir_name})
-                                                        if ! grep -q "^${fn}$" "$EXCLUDE_LIST" 2>/dev/null; then
-                                                            echo "$fn" >> "$EXCLUDE_LIST"
-                                                        fi
-                                                        ;;
-                                                esac
-                                            done < "$BUILD_FILES_LIST"
-                                            echo ""
-                                            echo "  Excluded directory: $dir_name"
-                                            sleep 0.5
-                                        fi
+                                        selected_dir="$dir_name"
                                         break
                                     fi
                                     counter=$((counter + 1))
                                 done < "$AVAILABLE_DIRS"
+                                
+                                if [ -n "$selected_dir" ]; then
+                                    # Add directory to exclusion list
+                                    echo "$selected_dir" >> "$EXCLUDE_DIRS_LIST"
+                                    
+                                    # Remove any subdirectories of this directory from the exclusion list
+                                    # since the parent being excluded covers them
+                                    if [ -s "$EXCLUDE_DIRS_LIST" ]; then
+                                        TEMP_EXCLUDE_DIRS="/tmp/build_temp_exclude_dirs_$$.txt"
+                                        > "$TEMP_EXCLUDE_DIRS"
+                                        while IFS= read -r existing_dir; do
+                                            [ -z "$existing_dir" ] && continue
+                                            case "$existing_dir" in
+                                                ${selected_dir}/*)
+                                                    # This is a subdirectory, skip it
+                                                    ;;
+                                                *)
+                                                    echo "$existing_dir" >> "$TEMP_EXCLUDE_DIRS"
+                                                    ;;
+                                            esac
+                                        done < "$EXCLUDE_DIRS_LIST"
+                                        mv "$TEMP_EXCLUDE_DIRS" "$EXCLUDE_DIRS_LIST"
+                                    fi
+                                    
+                                    # Remove individual file exclusions that are under this directory
+                                    if [ -s "$EXCLUDE_LIST" ]; then
+                                        TEMP_EXCLUDE_FILES="/tmp/build_temp_exclude_files_$$.txt"
+                                        > "$TEMP_EXCLUDE_FILES"
+                                        while IFS= read -r existing_file; do
+                                            [ -z "$existing_file" ] && continue
+                                            case "$existing_file" in
+                                                ${selected_dir}/*|${selected_dir})
+                                                    # This file is under the excluded directory, skip it
+                                                    ;;
+                                                *)
+                                                    echo "$existing_file" >> "$TEMP_EXCLUDE_FILES"
+                                                    ;;
+                                            esac
+                                        done < "$EXCLUDE_LIST"
+                                        mv "$TEMP_EXCLUDE_FILES" "$EXCLUDE_LIST"
+                                    fi
+                                    
+                                    echo ""
+                                    echo "  Excluded directory: $selected_dir"
+                                    sleep 0.5
+                                fi
                             fi
                             ;;
                     esac
                 done
-                rm -f "$AVAILABLE_DIRS"
+                rm -f "$AVAILABLE_DIRS" "$EXCLUDED_FILES_SET"
                 ;;
             
-            2)
+                        2)
                 # Browse files by size (with excluded dir files marked)
                 current_page=1
                 ITEMS_PER_PAGE=5
@@ -843,15 +1026,68 @@ build_config_interface() {
                     AVAILABLE_LIST="/tmp/build_available_$$.txt"
                     > "$AVAILABLE_LIST"
                     
+                    # Build a set of all excluded files (both directly excluded and via excluded dirs)
+                    EXCLUDED_FILES_SET="/tmp/build_excluded_files_set_$$.txt"
+                    > "$EXCLUDED_FILES_SET"
+                    
+                    # Add directly excluded files
+                    if [ -s "$EXCLUDE_LIST" ]; then
+                        while IFS= read -r f; do
+                            [ -z "$f" ] && continue
+                            echo "$f" >> "$EXCLUDED_FILES_SET"
+                        done < "$EXCLUDE_LIST"
+                    fi
+                    
+                    # Add files that fall under excluded directories
+                    if [ -s "$EXCLUDE_DIRS_LIST" ]; then
+                        while IFS='|' read -r fsize fname ftype; do
+                            [ -z "$fname" ] && continue
+                            while IFS= read -r excluded_dir; do
+                                [ -z "$excluded_dir" ] && continue
+                                case "$fname" in
+                                    ${excluded_dir}/*|${excluded_dir})
+                                        echo "$fname" >> "$EXCLUDED_FILES_SET"
+                                        break
+                                        ;;
+                                esac
+                            done < "$EXCLUDE_DIRS_LIST"
+                        done < "$BUILD_FILES_LIST"
+                    fi
+                    
+                    # Deduplicate excluded files set
+                    if [ -s "$EXCLUDED_FILES_SET" ]; then
+                        sort -u "$EXCLUDED_FILES_SET" > "${EXCLUDED_FILES_SET}.sorted"
+                        mv "${EXCLUDED_FILES_SET}.sorted" "$EXCLUDED_FILES_SET"
+                    fi
+                    
+                    # Process each file from BUILD_FILES_LIST
                     while IFS='|' read -r size_bytes filename file_type; do
                         [ -z "$filename" ] && continue
-                        if ! grep -q "^${filename}$" "$EXCLUDE_LIST" 2>/dev/null; then
-                            # Check if file is in excluded directory
-                            if is_file_in_excluded_dir "$filename"; then
-                                echo "${size_bytes}|${filename}|IN_DIR" >> "$AVAILABLE_LIST"
-                            else
-                                echo "${size_bytes}|${filename}|NORMAL" >> "$AVAILABLE_LIST"
-                            fi
+                        
+                        # Skip if file is already directly excluded
+                        if grep -q "^${filename}$" "$EXCLUDE_LIST" 2>/dev/null; then
+                            continue
+                        fi
+                        
+                        # Check if file is in an excluded directory
+                        in_excluded_dir=false
+                        if [ -s "$EXCLUDE_DIRS_LIST" ]; then
+                            while IFS= read -r excluded_dir; do
+                                [ -z "$excluded_dir" ] && continue
+                                case "$filename" in
+                                    ${excluded_dir}/*|${excluded_dir})
+                                        in_excluded_dir=true
+                                        break
+                                        ;;
+                                esac
+                            done < "$EXCLUDE_DIRS_LIST"
+                        fi
+                        
+                          if [ "$in_excluded_dir" = true ]; then
+                            # Skip files that are in excluded directories
+                            continue
+                        else
+                            echo "${size_bytes}|${filename}|NORMAL" >> "$AVAILABLE_LIST"
                         fi
                     done < "$BUILD_FILES_LIST"
                     
@@ -905,6 +1141,7 @@ build_config_interface() {
                             if echo "$cmd" | grep -q '^[0-9]\+$'; then
                                 line_num=0
                                 counter=1
+                                selected_file=""
                                 while IFS='|' read -r size_bytes filename status; do
                                     line_num=$((line_num + 1))
                                     [ "$line_num" -lt "$start_line" ] && continue
@@ -912,20 +1149,24 @@ build_config_interface() {
                                     [ -z "$filename" ] && continue
                                     
                                     if [ "$counter" = "$cmd" ]; then
-                                        if ! grep -q "^${filename}$" "$EXCLUDE_LIST" 2>/dev/null; then
-                                            echo "$filename" >> "$EXCLUDE_LIST"
-                                            echo "  Excluded: $filename"
-                                            sleep 0.5
-                                        fi
+                                        selected_file="$filename"
                                         break
                                     fi
                                     counter=$((counter + 1))
                                 done < "$AVAILABLE_LIST"
+                                
+                                if [ -n "$selected_file" ]; then
+                                    if ! grep -q "^${selected_file}$" "$EXCLUDE_LIST" 2>/dev/null; then
+                                        echo "$selected_file" >> "$EXCLUDE_LIST"
+                                        echo "  Excluded: $selected_file"
+                                        sleep 0.5
+                                    fi
+                                fi
                             fi
                             ;;
                     esac
                 done
-                rm -f "$AVAILABLE_LIST"
+                rm -f "$AVAILABLE_LIST" "$EXCLUDED_FILES_SET"
                 ;;
             
             3)
