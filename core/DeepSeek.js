@@ -400,9 +400,12 @@ class DeepSeek {
     async Chat(messages = [{ role: 'user', content: 'Who won the world series in 2020?' }], config = {}) {
         config.model = config.model || this.model;
         
+        // Default system rule: Respond in the same language as the user's query
+        const defaultSystemRule = "You must always respond in the same language that the user is using in their message. Detect the user's language and respond accordingly.";
+        
         const requestBody = {
             model: config.model,
-            messages: this._buildMessages(messages, config.system_prompt),
+            messages: this._buildMessages(messages, config.system_prompt || defaultSystemRule),
             stream: !!config.tokenCallback,
             // Map parameters to DeepSeek-compatible names
             ...(config.max_tokens !== undefined && { max_tokens: config.max_tokens }),
