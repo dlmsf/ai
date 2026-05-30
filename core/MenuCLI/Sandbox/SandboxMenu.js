@@ -22,6 +22,7 @@ const SandboxMenu = async (props) => ({
     title : `☕ Sandbox | ${
         props.openai_token ? `OpenAI ${props.openai_model ? `(${ColorText.cyan(props.openai_model)})` : ''}` : 
         props.deepinfra_token ? `DeepInfra ${props.deepinfra_model ? `(${ColorText.cyan(props.deepinfra_model)})` : ''}` : 
+        props.deepseek_token ? `DeepSeek ${props.deepseek_model ? `(${ColorText.cyan(props.deepseek_model)})` : ''}` : 
         `${props.server_url}${(props.server_port) ? `:${props.server_port}` : ''}`
     }`,
 options : [
@@ -37,7 +38,8 @@ options : [
                    await display(token.stream.content)
                },
                ...(props.openai_token ? {openai: true} : {}),
-               ...(props.deepinfra_token ? {deepinfra: true} : {})
+               ...(props.deepinfra_token ? {deepinfra: true} : {}),
+               ...(props.deepseek_token ? {deepseek: true} : {})
            })
         },{exitFunction : async () => {
             MenuCLI.rl = readline.createInterface({
@@ -241,7 +243,9 @@ options : [
                     openai_token : props.openai_token,
                     openai_model : props.openai_model,
                     deepinfra_token : props.deepinfra_token,
-                    deepinfra_model : props.deepinfra_model
+                    deepinfra_model : props.deepinfra_model,
+                    deepseek_token : props.deepseek_token,
+                    deepseek_model : props.deepseek_model
                 })
                 MenuCLI.displayMenu(SandboxMenu,{props : props,alert_emoji : '✔️',alert : 'WebGPT PM2 Server iniciado com sucesso !'})
             }

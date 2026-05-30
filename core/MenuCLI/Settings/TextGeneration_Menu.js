@@ -4,6 +4,7 @@ import MenuCLI from "../MenuCLI.js"
 import SettingsMenu from "./SettingsMenu.js"
 import LlamaCPP_Menu from "./LlamaCPP_Menu.js"
 import DeepInfra from "../../DeepInfra.js"
+import DeepSeek from "../../DeepSeek.js"
 
 const TextGeneration_Menu = () => ({
     title : `• Settings / TextGeneration`,
@@ -107,6 +108,44 @@ options : [
                     final_object.token = await MenuCLI.ask('DeepInfra Token : ')
                     final_object.model = await MenuCLI.ask('Select the model',{options : DeepInfra.Models})
                     ConfigManager.setKey('deepinfra',final_object)
+                    MenuCLI.displayMenu(TextGeneration_Menu)
+                }
+                
+                }
+            },
+        {
+            name : (ConfigManager.getKey('deepseek') ? ColorText.green('DeepSeek') : ColorText.red('DeepSeek')),
+            action : async () => {
+                if(ConfigManager.getKey('deepseek')){
+                    let actual = ConfigManager.getKey('deepseek')
+                    let response = await MenuCLI.ask('Edit',{options : [`Token`,`Model (${ColorText.cyan(actual.model)})`,'🗑️ Clear','Cancel']})
+                    switch (response) {
+                        case 'Token':
+                            actual.token = await MenuCLI.ask('DeepSeek Token : ')
+                            ConfigManager.setKey('deepseek',actual)
+                            MenuCLI.displayMenu(TextGeneration_Menu)
+                        break;
+        
+                        case `Model (${ColorText.cyan(actual.model)})`:
+                            actual.model = await MenuCLI.ask('Select the model',{options : DeepSeek.Models})
+                            ConfigManager.setKey('deepseek',actual)
+                            MenuCLI.displayMenu(TextGeneration_Menu)
+                            break;
+        
+                            case `🗑️ Clear`:
+                               ConfigManager.deleteKey('deepseek')
+                                MenuCLI.displayMenu(TextGeneration_Menu)
+                                break;
+                            
+                        default:
+                            MenuCLI.displayMenu(TextGeneration_Menu)
+                        break;
+                    }
+                } else {
+                    let final_object = {}
+                    final_object.token = await MenuCLI.ask('DeepSeek Token : ')
+                    final_object.model = await MenuCLI.ask('Select the model',{options : DeepSeek.Models})
+                    ConfigManager.setKey('deepseek',final_object)
                     MenuCLI.displayMenu(TextGeneration_Menu)
                 }
                 

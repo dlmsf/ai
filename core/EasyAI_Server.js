@@ -39,6 +39,8 @@ function execAsync(command) {
  * @property {string} [openai_model] - OpenAI model to use
  * @property {string} [deepinfra_token=''] - DeepInfra API token
  * @property {string} [deepinfra_model] - DeepInfra model to use
+ * @property {string} [deepseek_token=''] - DeepSeek API token
+ * @property {string} [deepseek_model] - DeepSeek model to use
  * @property {string} [server_url=''] - External server URL
  * @property {number} [server_port=4000] - External server port
  * @property {string} [server_token=''] - External server token
@@ -103,6 +105,7 @@ class EasyAI_Server {
         }
         
         easyAIConfig.deepinfra_log = true
+        easyAIConfig.deepseek_log = true
         
         this.AI = new EasyAI(easyAIConfig);
         this.server = http.createServer((req, res) => this.handleRequest(req, res));

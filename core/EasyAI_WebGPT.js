@@ -53,6 +53,11 @@ class EasyAI_WebGPT {
       easyAIConfig.deepinfra_token = config.deepinfra_token;
       easyAIConfig.deepinfra_model = config.deepinfra_model;
     }
+    // If we have DeepSeek token, use that
+    else if (config.deepseek_token) {
+      easyAIConfig.deepseek_token = config.deepseek_token;
+      easyAIConfig.deepseek_model = config.deepseek_model;
+    }
     
     // If we have server URL, use that (with token if provided)
     if (config.easyai_url) {
@@ -67,6 +72,7 @@ class EasyAI_WebGPT {
     console.log('EasyAI WebGPT config:', { 
       hasOpenAI: !!config.openai_token, 
       hasDeepInfra: !!config.deepinfra_token,
+      hasDeepSeek: !!config.deepseek_token,
       hasServerURL: !!config.easyai_url,
       hasToken: !!this.easyai_token
     });
@@ -189,11 +195,13 @@ class EasyAI_WebGPT {
               systemType: this.systemType
             };
             
-            // Add openai/deepinfra flags only if those tokens exist
+            // Add openai/deepinfra/deepseek flags only if those tokens exist
             if (config.openai_token) {
               chatConfig.openai = true;
             } else if (config.deepinfra_token) {
               chatConfig.deepinfra = true;
+            } else if (config.deepseek_token) {
+              chatConfig.deepseek = true;
             }
             
             console.log('Calling AI.Chat with messages:', messagesForAI.length);

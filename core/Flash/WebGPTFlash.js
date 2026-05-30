@@ -8,6 +8,7 @@ import ColorText from '../useful/ColorText.js'
 import ConfigManager from "../ConfigManager.js"
 import FreePort from "../useful/FreePort.js"
 import DeepInfra from "../DeepInfra.js"
+import DeepSeek from "../DeepSeek.js"
 
 let webgpt_process_name
 let ai_process_name
@@ -56,9 +57,10 @@ const args = process.argv.slice(2);
 if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
     let toload = (args.length > 0) ? args[0] : ConfigManager.getKey('defaultwebgptsave')
     
-    if(toload.toLowerCase() == 'openai' || toload.toLowerCase() == 'deepinfra'){
+    if(toload.toLowerCase() == 'openai' || toload.toLowerCase() == 'deepinfra' || toload.toLowerCase() == 'deepseek'){
         if((ConfigManager.getKey('openai') && toload.toLowerCase() == 'openai') || 
-           (ConfigManager.getKey('deepinfra') && toload.toLowerCase() == 'deepinfra')){
+           (ConfigManager.getKey('deepinfra') && toload.toLowerCase() == 'deepinfra') ||
+           (ConfigManager.getKey('deepseek') && toload.toLowerCase() == 'deepseek')){
             
             if(toload.toLowerCase() == 'openai' && ConfigManager.getKey('openai')){
                 let openai_info = ConfigManager.getKey('openai')
@@ -83,6 +85,19 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 })
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
+                console.log(`📡 Process ID: ${webgpt_process_name}`)
+                process.exit(0)
+                
+            } else if (toload.toLowerCase() == 'deepseek' && ConfigManager.getKey('deepseek')) {
+                let deepseek_info = ConfigManager.getKey('deepseek')
+                let port = await FreePort(3000)
+                webgpt_process_name = await EasyAI.WebGPT.PM2({
+                    port: port,
+                    deepseek_token: deepseek_info.token, 
+                    deepseek_model: deepseek_info.model
+                })
+                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
                 process.exit(0)
             }
@@ -138,6 +153,31 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 })
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
+                console.log(`📡 Process ID: ${webgpt_process_name}`)
+                process.exit(0)
+                
+            } else if(toload.toLowerCase() == 'deepseek'){
+                final_object.token = await cli.ask('DeepSeek Token: ')
+                final_object.model = await cli.ask('Select the model', {
+                    options: DeepSeek.Models
+                })
+                let save = await cli.ask('Save the DeepSeek config? ', {
+                    options: ['yes', 'no']
+                })
+                if(save == 'yes'){
+                    ConfigManager.setKey('deepseek', final_object)
+                }
+                cli.close()
+                console.clear()
+                
+                let port = await FreePort(3000)
+                webgpt_process_name = await EasyAI.WebGPT.PM2({
+                    port: port,
+                    deepseek_token: final_object.token, 
+                    deepseek_model: final_object.model
+                })
+                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
                 process.exit(0)
             }

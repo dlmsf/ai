@@ -12,6 +12,7 @@ import FreePort from "../useful/FreePort.js"
 import ChatHUD from "../ChatHUD.js";
 import { forceCleanAllReadlineInterfaces } from "../util/cleanup.js"
 import DeepInfra from "../DeepInfra.js"
+import DeepSeek from "../DeepSeek.js"
 
 let ai
 let process_name
@@ -255,6 +256,33 @@ async function setupDeepInfra() {
     })
 }
 
+// DeepSeek setup
+async function setupDeepSeek() {
+    let cli = new TerminalHUD()
+    let final_object = {}
+    
+    final_object.token = await cli.ask('DeepSeek Token: ')
+    final_object.model = await cli.ask('Select the model', {
+        options: DeepSeek.Models
+    })
+    
+    let save = await cli.ask('Save the DeepSeek config? ', {
+        options: ['yes', 'no']
+    })
+    
+    if (save == 'yes') {
+        ConfigManager.setKey('deepseek', final_object)
+    }
+    
+    await closeMenuAndStartChat(cli, () => {
+        ai = new EasyAI({
+            deepseek_token: final_object.token,
+            deepseek_model: final_object.model
+        })
+        StartChat(ai)
+    })
+}
+
 // Handle saved server
 async function handleSavedServer(saveName) {
     try {
@@ -357,6 +385,21 @@ async function main() {
             StartChat(ai)
         } else {
             await setupDeepInfra()
+        }
+        return
+    }
+    
+    // Handle DeepSeek
+    if (toloadLower === 'deepseek') {
+        if (ConfigManager.getKey('deepseek')) {
+            const deepseek_info = ConfigManager.getKey('deepseek')
+            ai = new EasyAI({
+                deepseek_token: deepseek_info.token,
+                deepseek_model: deepseek_info.model
+            })
+            StartChat(ai)
+        } else {
+            await setupDeepSeek()
         }
         return
     }
