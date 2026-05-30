@@ -13,6 +13,7 @@ import generateUniqueCode from "./core/util/generateUniqueCode.js";
 import ConfigManager from "./core/ConfigManager.js";
 import {exec} from 'child_process'
 import DeepInfra from './core/DeepInfra.js'
+import DeepSeek from './core/DeepSeek.js'
 import NewChatPrompt from "./core/util/NewChatPrompt.js";
 import consumeChatRoute from "./core/useful/consumeChatRoute.js";
 
@@ -30,6 +31,8 @@ class EasyAI {
  * @param {string} [config.openai_model]
  * @param {string} [config.deepinfra_token='']
  * @param {string} [config.deepinfra_model]
+ * @param {string} [config.deepseek_token='']
+ * @param {string} [config.deepseek_model]
  * @param {string} [config.server_url='']
  * @param {number} [config.server_port=4000]
  * @param {string} [config.server_token='']
@@ -61,6 +64,8 @@ constructor(config = {}) {
         openai_model: undefined,
         deepinfra_token : '',
         deepinfra_model : undefined,
+        deepseek_token : '',
+        deepseek_model : undefined,
         server_url: '',
         server_port: 4000,
         server_token: '',
@@ -117,6 +122,7 @@ constructor(config = {}) {
         this.ChatModule = new ChatModule()
         this.OpenAI = (config.openai_token) ? new OpenAI(config.openai_token,{model : config.openai_model}) : null
         this.DeepInfra = (config.deepinfra_token) ? new DeepInfra(config.deepinfra_token,{model : config.deepinfra_model,log : config.deepinfra_log}) : null
+        this.DeepSeek = (config.deepseek_token) ? new DeepSeek(config.deepseek_token,{model : config.deepseek_model,log : config.deepseek_log}) : null
 
         this.ServerURL = config.server_url || null
         this.ServerPORT = config.server_port || 4000
@@ -294,7 +300,7 @@ constructor(config = {}) {
             return instanceIndex;
         }
 
-        if(!this.ServerURL && !this.OpenAI && !this.DeepInfra){
+        if(!this.ServerURL && !this.OpenAI && !this.DeepInfra && !this.DeepSeek){
             this.LlamaCPP.NewInstance()
             
         }
@@ -333,7 +339,7 @@ constructor(config = {}) {
 
     }
 
-async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra : false,logerror : false, stream: true, retryLimit: 420000,tokenCallback : () => {}}) {
+async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra : false,deepseek : false,logerror : false, stream: true, retryLimit: 420000,tokenCallback : () => {}}) {
 
     if (typeof config.tokenCallback === 'function' && isNonEmptyFunction(config.tokenCallback)) {
         config.stream = true;
@@ -341,10 +347,10 @@ async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra :
         config.stream = false;
     }
 
-        if(this.ServerURL || this.OpenAI || this.DeepInfra){
+        if(this.ServerURL || this.OpenAI || this.DeepInfra || this.DeepSeek){
 
             if(this.ServerURL){
-                if((config.openai && this.OpenAI) || (config.deepinfra && this.DeepInfra)){
+                if((config.openai && this.OpenAI) || (config.deepinfra && this.DeepInfra) || (config.deepseek && this.DeepSeek)){
                     if(config.openai && this.OpenAI){
                         delete config.openai
                         return await this.OpenAI.Generate(prompt,config)
@@ -370,6 +376,28 @@ async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra :
                         })
                     } else if(config.deepinfra && this.DeepInfra) {
                         return await this.DeepInfra.Generate(prompt,config)
+                        .catch(e =>{
+                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
+                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
+                    
+                        if(config.stream == true){ 
+                            return new Promise((resolve) => {
+                                let i = 0;
+                                (function next() {
+                                    if (i < tokens.length) {
+                                        config.tokenCallback({stream: {content: tokens[i]}});
+                                        i++;
+                                        setTimeout(next, 45);
+                                    } else {
+                                        resolve(consume_result); // testar trocando por '' dps
+                                    }
+                                })();
+                            });
+                        }
+
+                        })
+                    } else if(config.deepseek && this.DeepSeek) {
+                        return await this.DeepSeek.Generate(prompt,config)
                         .catch(e =>{
                             const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
                         consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
@@ -417,8 +445,8 @@ async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra :
                     return consume_result
                 }
                 
-            } else if(this.OpenAI || this.DeepInfra){
-                    if(this.OpenAI){
+            } else if(this.OpenAI || this.DeepInfra || this.DeepSeek){
+                    if(this.OpenAI && !config.deepinfra && !config.deepseek){
                         return await this.OpenAI.Generate(prompt,config)
                         .catch(e =>{
                             const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
@@ -440,8 +468,30 @@ async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra :
                         }
 
                         })
-                    } else if(this.DeepInfra){
+                    } else if(this.DeepInfra && !config.deepseek){
                         return await this.DeepInfra.Generate(prompt,config)
+                        .catch(e =>{
+                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
+                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
+                    
+                        if(config.stream == true){ 
+                            return new Promise((resolve) => {
+                                let i = 0;
+                                (function next() {
+                                    if (i < tokens.length) {
+                                        config.tokenCallback({stream: {content: tokens[i]}});
+                                        i++;
+                                        setTimeout(next, 45);
+                                    } else {
+                                        resolve(consume_result); // testar trocando por '' dps
+                                    }
+                                })();
+                            });
+                        }
+
+                        })
+                    } else if(this.DeepSeek){
+                        return await this.DeepSeek.Generate(prompt,config)
                         .catch(e =>{
                             const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
                         consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
@@ -568,18 +618,40 @@ async Chat(messages = [], config = {}) {
                 }
 
     // Handle OpenAI
-    if ((config.openai || this.OpenAI) && !config.openai_avoidchat) {
+    if ((config.openai || this.OpenAI) && !config.deepinfra && !config.deepseek && !config.openai_avoidchat) {
         delete config.openai;
         return await this.OpenAI.Chat(limitedMessages, config);
     }
 
-    if ((config.deepinfra || this.DeepInfra) && !config.deepinfra_avoidchat) {
+    // Handle DeepInfra
+    if ((config.deepinfra || this.DeepInfra) && !config.deepseek && !config.deepinfra_avoidchat) {
         delete config.deepinfra;
         return await this.DeepInfra.Chat(limitedMessages, config);
     }
     
-    // Handle DeepInfra
+    // Handle DeepSeek
+    if ((config.deepseek || this.DeepSeek) && !config.deepseek_avoidchat) {
+        delete config.deepseek;
+        return await this.DeepSeek.Chat(limitedMessages, config);
+    }
+    
+    // Handle DeepInfra (legacy - convert to prompt-based)
     if (this.DeepInfra) {
+        let systemMessage = config.systemMessage;
+        if (!systemMessage && config.systemType) {
+            systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
+        }
+        
+        const final_prompt = NewChatPrompt.build(limitedMessages, systemMessage);
+        
+        return await this.Generate(final_prompt, {
+            ...config,
+            stop: ['<|im_end|>']
+        });
+    }
+    
+    // Handle DeepSeek (legacy - convert to prompt-based)
+    if (this.DeepSeek) {
         let systemMessage = config.systemMessage;
         if (!systemMessage && config.systemType) {
             systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
