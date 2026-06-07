@@ -21,6 +21,8 @@ BUILD_CONFIG=false
 BUILD_MESSAGE_MODE=false
 BUILD_DIR="$REPO_DIR/build"
 ONLINE_MODE=false
+NODE_ONLY=false
+RESET_DEP=false
 MOVE_GIT=false
 BUILD_SAVE_FILE="$REPO_DIR/buildsaves.cfg"
 
@@ -2242,6 +2244,8 @@ show_help() {
   echo "  --message        Use commit message for build naming (default uses version-based naming)"
   echo "  --version [VER]  Build from a specific version or latest version (use with --build)"
   echo "  --online         Force online package installation using apt/apk instead of local .deb/.apk files"
+  echo "  --node           Install only Node.js during package installation (works with --online)"
+  echo "  --resetdep       Completely remove and reinstall dependencies from scratch"
   echo "  --movegit        Move .git directory to installation directory (default: excluded)"
   echo ""
   echo "BUILD EXAMPLES:"
@@ -2304,6 +2308,13 @@ show_help() {
   echo "  Builds are saved in ./build/<name> directory"
   echo "  Default naming: finds last version tag/commit and adds commit distance (e.g., 0.1.1.5)"
   echo ""
+  echo "PACKAGE INSTALLATION OPTIONS:"
+  echo "  --node          Install only Node.js (skips gcc, g++, cmake)"
+  echo "  --online        Force online installation using system package manager"
+  echo "  --resetdep      Remove existing packages completely before reinstalling"
+  echo "  --online --node Install only Node.js online"
+  echo "  --resetdep --online --node  Remove all, then install only Node.js online"
+  echo ""
   echo "ONLINE INSTALLATION:"
   echo "  By default, the script installs packages from local .deb/.apk files."
   echo "  Use --online to force online installation using the system package manager."
@@ -2320,6 +2331,8 @@ show_help() {
   echo "  Interactive build:         $0 --build --config"
   echo "  Build with message name:   $0 --build --message"
   echo "  Force online installation: $0 --online"
+  echo "  Install only Node.js:      $0 --node"
+  echo "  Reset and reinstall deps:  $0 --resetdep"
   echo "  Include .git directory:    $0 --movegit"
   echo "  Build from saved config:   $0 --build myconfig"
   echo ""
@@ -2376,52 +2389,156 @@ Skipping step...\n"
   printf "\r%s completed.                      \n" "$message"
 }
 
+# =============================================================================
+# FUNCTION: Reset dependencies - completely remove packages
+# =============================================================================
+reset_dependencies() {
+    log_message "Resetting dependencies - removing existing packages..."
+    
+    case "$OS_TYPE" in
+        "ubuntu")
+            log_message "Removing packages on Ubuntu..."
+            # Remove packages completely with purge
+            if [ "$NODE_ONLY" = true ]; then
+                log_message "Removing nodejs only..."
+                if [ "$LOG_MODE" = true ]; then
+                    sudo apt-get purge -y nodejs nodejs-dev node-gyp libnode-dev 2>&1 | tee -a "$LOG_FILE"
+                    sudo apt-get autoremove -y 2>&1 | tee -a "$LOG_FILE"
+                else
+                    sudo apt-get purge -y nodejs nodejs-dev node-gyp libnode-dev > /dev/null 2>&1
+                    sudo apt-get autoremove -y > /dev/null 2>&1
+                fi
+            else
+                log_message "Removing all development packages..."
+                if [ "$LOG_MODE" = true ]; then
+                    sudo apt-get purge -y nodejs nodejs-dev node-gyp libnode-dev gcc g++ cmake make 2>&1 | tee -a "$LOG_FILE"
+                    sudo apt-get autoremove -y 2>&1 | tee -a "$LOG_FILE"
+                else
+                    sudo apt-get purge -y nodejs nodejs-dev node-gyp libnode-dev gcc g++ cmake make > /dev/null 2>&1
+                    sudo apt-get autoremove -y > /dev/null 2>&1
+                fi
+            fi
+            # Clean package cache
+            sudo apt-get clean > /dev/null 2>&1
+            ;;
+        "alpine")
+            log_message "Removing packages on Alpine..."
+            if [ "$NODE_ONLY" = true ]; then
+                log_message "Removing nodejs only..."
+                if [ "$LOG_MODE" = true ]; then
+                    apk del nodejs npm 2>&1 | tee -a "$LOG_FILE"
+                else
+                    apk del nodejs npm > /dev/null 2>&1
+                fi
+            else
+                log_message "Removing all development packages..."
+                if [ "$LOG_MODE" = true ]; then
+                    apk del nodejs npm gcc g++ cmake make bash 2>&1 | tee -a "$LOG_FILE"
+                else
+                    apk del nodejs npm gcc g++ cmake make bash > /dev/null 2>&1
+                fi
+            fi
+            # Clean package cache
+            rm -rf /var/cache/apk/* > /dev/null 2>&1
+            ;;
+        *)
+            log_message "Unknown OS type. Cannot reset dependencies."
+            ;;
+    esac
+    
+    log_message "Dependencies reset completed."
+}
+
 # Function to install packages using apt on Ubuntu
 install_with_apt() {
-  log_message "Installing packages using apt (online mode)..."
-  
-  # Update package list
-  log_message "Updating package lists..."
-  if [ "$LOG_MODE" = true ]; then
-    sudo apt-get update &
+  if [ "$NODE_ONLY" = true ]; then
+    log_message "Installing Node.js only using apt (online mode)..."
+    
+    # Update package list
+    log_message "Updating package lists..."
+    if [ "$LOG_MODE" = true ]; then
+      sudo apt-get update &
+    else
+      sudo apt-get update > /dev/null 2>&1 &
+    fi
+    show_progress "Updating package lists" $!
+    
+    # Install only Node.js
+    log_message "Installing nodejs..."
+    if [ "$LOG_MODE" = true ]; then
+      sudo apt-get install -y nodejs &
+    else
+      sudo apt-get install -y nodejs > /dev/null 2>&1 &
+    fi
+    show_progress "Installing Node.js" $!
   else
-    sudo apt-get update > /dev/null 2>&1 &
+    log_message "Installing all packages using apt (online mode)..."
+    
+    # Update package list
+    log_message "Updating package lists..."
+    if [ "$LOG_MODE" = true ]; then
+      sudo apt-get update &
+    else
+      sudo apt-get update > /dev/null 2>&1 &
+    fi
+    show_progress "Updating package lists" $!
+    
+    # Install required packages
+    log_message "Installing nodejs, gcc, g++, cmake..."
+    if [ "$LOG_MODE" = true ]; then
+      sudo apt-get install -y nodejs gcc g++ cmake &
+    else
+      sudo apt-get install -y nodejs gcc g++ cmake > /dev/null 2>&1 &
+    fi
+    show_progress "Installing packages" $!
   fi
-  show_progress "Updating package lists" $!
-  
-  # Install required packages
-  log_message "Installing nodejs, gcc, g++, cmake..."
-  if [ "$LOG_MODE" = true ]; then
-    sudo apt-get install -y nodejs gcc g++ cmake &
-  else
-    sudo apt-get install -y nodejs gcc g++ cmake > /dev/null 2>&1 &
-  fi
-  show_progress "Installing packages" $!
   
   log_message "apt installation completed."
 }
 
 # Function to install packages using apk on Alpine (online mode)
 install_with_apk() {
-  log_message "Installing packages using apk (online mode)..."
-  
-  # Update package list
-  log_message "Updating package lists..."
-  if [ "$LOG_MODE" = true ]; then
-    apk update &
+  if [ "$NODE_ONLY" = true ]; then
+    log_message "Installing Node.js only using apk (online mode)..."
+    
+    # Update package list
+    log_message "Updating package lists..."
+    if [ "$LOG_MODE" = true ]; then
+      apk update &
+    else
+      apk update > /dev/null 2>&1 &
+    fi
+    show_progress "Updating package lists" $!
+    
+    # Install only Node.js
+    log_message "Installing nodejs..."
+    if [ "$LOG_MODE" = true ]; then
+      apk add nodejs bash &
+    else
+      apk add nodejs bash > /dev/null 2>&1 &
+    fi
+    show_progress "Installing Node.js" $!
   else
-    apk update > /dev/null 2>&1 &
+    log_message "Installing all packages using apk (online mode)..."
+    
+    # Update package list
+    log_message "Updating package lists..."
+    if [ "$LOG_MODE" = true ]; then
+      apk update &
+    else
+      apk update > /dev/null 2>&1 &
+    fi
+    show_progress "Updating package lists" $!
+    
+    # Install required packages
+    log_message "Installing nodejs, gcc, g++, cmake..."
+    if [ "$LOG_MODE" = true ]; then
+      apk add nodejs gcc g++ cmake make bash &
+    else
+      apk add nodejs gcc g++ cmake make bash > /dev/null 2>&1 &
+    fi
+    show_progress "Installing packages" $!
   fi
-  show_progress "Updating package lists" $!
-  
-  # Install required packages
-  log_message "Installing nodejs, gcc, g++, cmake..."
-  if [ "$LOG_MODE" = true ]; then
-    apk add nodejs gcc g++ cmake make bash &
-  else
-    apk add nodejs gcc g++ cmake make bash > /dev/null 2>&1 &
-  fi
-  show_progress "Installing packages" $!
   
   log_message "apk installation completed."
 }
@@ -2433,6 +2550,11 @@ install_packages() {
     return
   fi
 
+  # Handle --resetdep: completely remove dependencies first
+  if [ "$RESET_DEP" = true ]; then
+    reset_dependencies
+  fi
+
   # Determine if we should use online mode
   USE_ONLINE=false
   
@@ -2440,7 +2562,11 @@ install_packages() {
   if [ "$ONLINE_MODE" = true ]; then
     USE_ONLINE=true
     log_message "Online mode forced via --online flag."
-  # Case 2: Ubuntu on WSL - automatically use online mode
+  # Case 2: --node flag without --online - falls back to online installation
+  elif [ "$NODE_ONLY" = true ]; then
+    USE_ONLINE=true
+    log_message "--node specified without --online, falling back to online package installation."
+  # Case 3: Ubuntu on WSL - automatically use online mode
   elif [ "$OS_TYPE" = "ubuntu" ] && [ "$ON_WSL" = true ]; then
     USE_ONLINE=true
     log_message "Ubuntu on WSL detected - automatically using online package installation."
@@ -2955,11 +3081,13 @@ for arg in "$@"; do
         --local-dir) LOCAL_DIR_MODE=true ;;
         --no-preserve) PRESERVE_DATA=false ;;
         --online) ONLINE_MODE=true ;;
+        --node) NODE_ONLY=true ;;
+        --resetdep) RESET_DEP=true ;;
         --movegit) MOVE_GIT=true ;;
     esac
     
     # Handle --build with optional save name
-    if [ "$prev_arg" = "--build" ] && [ "$arg" != "--build" ] && [ "$arg" != "--tar" ] && [ "$arg" != "--config" ] && [ "$arg" != "--message" ] && [ "$arg" != "--version" ] && [ "$arg" != "--log" ] && [ "$arg" != "--skip-pkgs" ] && [ "$arg" != "--local-dir" ] && [ "$arg" != "--no-preserve" ] && [ "$arg" != "--online" ] && [ "$arg" != "--movegit" ] && [ "$arg" != "-h" ] && [ "$arg" != "--help" ]; then
+    if [ "$prev_arg" = "--build" ] && [ "$arg" != "--build" ] && [ "$arg" != "--tar" ] && [ "$arg" != "--config" ] && [ "$arg" != "--message" ] && [ "$arg" != "--version" ] && [ "$arg" != "--log" ] && [ "$arg" != "--skip-pkgs" ] && [ "$arg" != "--local-dir" ] && [ "$arg" != "--no-preserve" ] && [ "$arg" != "--online" ] && [ "$arg" != "--node" ] && [ "$arg" != "--resetdep" ] && [ "$arg" != "--movegit" ] && [ "$arg" != "-h" ] && [ "$arg" != "--help" ]; then
         BUILD_SAVE_NAME="$arg"
     fi
     
@@ -3202,12 +3330,18 @@ fi
 # Display package installation method information
 if [ "$SKIP_PKGS" = true ]; then
   log_message "Note: Package installation was skipped (--skip-pkgs or existing installation)"
+elif [ "$NODE_ONLY" = true ]; then
+  log_message "Note: Only Node.js was installed (--node mode)"
 elif [ "$ONLINE_MODE" = true ]; then
   log_message "Note: Packages were installed online using system package manager (--online mode)"
 elif [ "$OS_TYPE" = "ubuntu" ] && [ "$ON_WSL" = true ]; then
   log_message "Note: Ubuntu on WSL detected - packages were installed online using apt"
 else
   log_message "Note: Packages were installed from local .deb/.apk files"
+fi
+
+if [ "$RESET_DEP" = true ]; then
+  log_message "Note: Dependencies were reset before installation (--resetdep mode)"
 fi
 
 # Display git directory status
