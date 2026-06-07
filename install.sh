@@ -19,6 +19,7 @@ BUILD_MODE=false
 BUILD_TAR=false
 BUILD_CONFIG=false
 BUILD_MESSAGE_MODE=false
+BUILD_STAGED=false
 BUILD_DIR="$REPO_DIR/build"
 ONLINE_MODE=false
 NODE_ONLY=false
@@ -1917,35 +1918,73 @@ do_build() {
         BUILD_COMMIT="$BUILD_SELECTED_COMMIT"
     fi
     
-    # IMPROVE 1: Use version-based naming by default, message-based with --message flag
-    if [ "$BUILD_MESSAGE_MODE" = true ]; then
-        # Use commit message for naming
-        BUILD_COMMIT_MSG=$(git log -1 --pretty=%B "$BUILD_COMMIT" 2>/dev/null | head -n1)
-        if [ -n "$BUILD_COMMIT_MSG" ]; then
-            build_name=$(echo "$BUILD_COMMIT_MSG" | tr ' ' '_' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g' | sed 's/^_//' | sed 's/_$//')
-            [ -z "$build_name" ] && build_name="build"
-        else
-            build_name="build_$(date +%Y%m%d_%H%M%S)"
+    # =========================================================================
+    # STAGED BUILD MODE: Build from current working tree including uncommitted changes
+    # =========================================================================
+    if [ "$BUILD_STAGED" = true ]; then
+        log_message "Staged mode: Building from current working tree (including uncommitted changes)..."
+        
+        # Verify git repository has a HEAD commit (required for version calculation)
+        if ! git rev-parse HEAD >/dev/null 2>&1; then
+            log_message "Error: No commits in repository. Staged mode requires at least one commit."
+            echo "Error: Staged mode requires at least one commit in the repository"
+            exit 1
         fi
-        log_message "Building with message-based name: $build_name"
-    else
-        # Use version-based naming (default)
-        build_version=$(calculate_build_version "$BUILD_COMMIT")
-        if [ -n "$build_version" ]; then
-            build_name="$build_version"
-            log_message "Building with version-based name: $build_name"
+        
+        # In staged mode, we always use the current working tree (no specific commit)
+        BUILD_COMMIT=""
+        BUILD_COMMIT_MSG="Staged build - current working tree with uncommitted changes"
+        
+        # Determine build name for staged builds
+        if [ "$BUILD_MESSAGE_MODE" = true ]; then
+            # Use a descriptive name with timestamp
+            build_name="staged_$(date +%Y%m%d_%H%M%S)"
         else
-            # Fallback to commit message if no version found
+            # Use version-based naming with staged suffix
+            HEAD_BUILD_VERSION=$(calculate_build_version "HEAD")
+            if [ -n "$HEAD_BUILD_VERSION" ]; then
+                build_name="${HEAD_BUILD_VERSION}-staged"
+            else
+                build_name="staged_$(date +%Y%m%d_%H%M%S)"
+            fi
+        fi
+        
+        log_message "Staged build name: $build_name"
+    else
+        # =====================================================================
+        # STANDARD BUILD MODE: Build from specific commit or HEAD
+        # =====================================================================
+        
+        # IMPROVE 1: Use version-based naming by default, message-based with --message flag
+        if [ "$BUILD_MESSAGE_MODE" = true ]; then
+            # Use commit message for naming
             BUILD_COMMIT_MSG=$(git log -1 --pretty=%B "$BUILD_COMMIT" 2>/dev/null | head -n1)
             if [ -n "$BUILD_COMMIT_MSG" ]; then
                 build_name=$(echo "$BUILD_COMMIT_MSG" | tr ' ' '_' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g' | sed 's/^_//' | sed 's/_$//')
+                [ -z "$build_name" ] && build_name="build"
+            else
+                build_name="build_$(date +%Y%m%d_%H%M%S)"
             fi
-            [ -z "$build_name" ] && build_name="build_$(date +%Y%m%d_%H%M%S)"
-            log_message "No version found, using fallback name: $build_name"
+            log_message "Building with message-based name: $build_name"
+        else
+            # Use version-based naming (default)
+            build_version=$(calculate_build_version "$BUILD_COMMIT")
+            if [ -n "$build_version" ]; then
+                build_name="$build_version"
+                log_message "Building with version-based name: $build_name"
+            else
+                # Fallback to commit message if no version found
+                BUILD_COMMIT_MSG=$(git log -1 --pretty=%B "$BUILD_COMMIT" 2>/dev/null | head -n1)
+                if [ -n "$BUILD_COMMIT_MSG" ]; then
+                    build_name=$(echo "$BUILD_COMMIT_MSG" | tr ' ' '_' | sed 's/[^a-zA-Z0-9._-]/_/g' | sed 's/__*/_/g' | sed 's/^_//' | sed 's/_$//')
+                fi
+                [ -z "$build_name" ] && build_name="build_$(date +%Y%m%d_%H%M%S)"
+                log_message "No version found, using fallback name: $build_name"
+            fi
         fi
+        
+        BUILD_COMMIT_MSG=$(git log -1 --pretty=%B "$BUILD_COMMIT" 2>/dev/null | head -n1)
     fi
-    
-    BUILD_COMMIT_MSG=$(git log -1 --pretty=%B "$BUILD_COMMIT" 2>/dev/null | head -n1)
     
     # Handle --version flag
     if [ -n "$BUILD_VERSION" ]; then
@@ -2054,8 +2093,9 @@ do_build() {
     rm -rf "$temp_build"
     mkdir -p "$temp_build"
     
-    # Get list of files from the selected commit and extract them
-    log_message "Extracting files from commit $BUILD_COMMIT..."
+    # =========================================================================
+    # FILE EXTRACTION: Handle staged vs commit-based builds
+    # =========================================================================
     
     # Check if we have exclusions from config or directories
     has_exclusions=false
@@ -2063,16 +2103,29 @@ do_build() {
     [ -n "$BUILD_EXCLUDE_DIRS_LIST" ] && [ -f "$BUILD_EXCLUDE_DIRS_LIST" ] && [ -s "$BUILD_EXCLUDE_DIRS_LIST" ] && has_exclusions=true
     
     if [ "$has_exclusions" = true ]; then
-        # With exclusions: extract all then remove excluded
+        # =====================================================================
+        # BUILD WITH EXCLUSIONS
+        # =====================================================================
         excluded_file_count=0
         [ -f "$EXCLUDE_LIST" ] && excluded_file_count=$(wc -l < "$EXCLUDE_LIST" 2>/dev/null || echo 0)
         excluded_dir_count=0
         [ -n "$BUILD_EXCLUDE_DIRS_LIST" ] && [ -f "$BUILD_EXCLUDE_DIRS_LIST" ] && excluded_dir_count=$(wc -l < "$BUILD_EXCLUDE_DIRS_LIST" 2>/dev/null || echo 0)
         
         log_message "Applying exclusions ($excluded_file_count files, $excluded_dir_count directories excluded)..."
-        git archive "$BUILD_COMMIT" 2>/dev/null | (cd "$temp_build" && tar xf - 2>/dev/null)
         
-        if [ $? -eq 0 ]; then
+        # Extract files based on source type
+        if [ -z "$BUILD_COMMIT" ]; then
+            # Staged mode: copy from working directory
+            log_message "Copying files from working directory for staged build..."
+            (cd "$REPO_DIR" && find . -type f -not -path './.git/*' -exec cp --parents {} "$temp_build" \; 2>/dev/null)
+            extract_status=$?
+        else
+            # Commit mode: use git archive
+            git archive "$BUILD_COMMIT" 2>/dev/null | (cd "$temp_build" && tar xf - 2>/dev/null)
+            extract_status=$?
+        fi
+        
+        if [ $extract_status -eq 0 ]; then
             # Remove excluded directories first
             if [ -n "$BUILD_EXCLUDE_DIRS_LIST" ] && [ -f "$BUILD_EXCLUDE_DIRS_LIST" ] && [ -s "$BUILD_EXCLUDE_DIRS_LIST" ]; then
                 while IFS= read -r excluded_dir; do
@@ -2098,18 +2151,31 @@ do_build() {
             # Remove empty directories
             find "$temp_build" -type d -empty -delete 2>/dev/null
         else
-            log_message "Error: Failed to extract files from git"
-            echo "Error: Failed to extract files from git"
+            log_message "Error: Failed to extract files"
+            echo "Error: Failed to extract files"
             rm -rf "$temp_build"
             exit 1
         fi
     else
-        # No exclusions: simple archive extraction
-        git archive "$BUILD_COMMIT" 2>/dev/null | (cd "$temp_build" && tar xf - 2>/dev/null)
+        # =====================================================================
+        # BUILD WITHOUT EXCLUSIONS
+        # =====================================================================
         
-        if [ $? -ne 0 ]; then
-            log_message "Error: Failed to extract files from git"
-            echo "Error: Failed to extract files from git"
+        # Extract files based on source type
+        if [ -z "$BUILD_COMMIT" ]; then
+            # Staged mode: copy from working directory
+            log_message "Copying files from working directory for staged build (no exclusions)..."
+            (cd "$REPO_DIR" && find . -type f -not -path './.git/*' -exec cp --parents {} "$temp_build" \; 2>/dev/null)
+            extract_status=$?
+        else
+            # Commit mode: use git archive
+            git archive "$BUILD_COMMIT" 2>/dev/null | (cd "$temp_build" && tar xf - 2>/dev/null)
+            extract_status=$?
+        fi
+        
+        if [ $extract_status -ne 0 ]; then
+            log_message "Error: Failed to extract files"
+            echo "Error: Failed to extract files"
             rm -rf "$temp_build"
             exit 1
         fi
@@ -2167,7 +2233,7 @@ do_build() {
         cat > "${tar_file}.info" << EOF
 Build Name: $build_name
 Build Date: $(date)
-Source Commit: $(git rev-parse "$BUILD_COMMIT" 2>/dev/null)
+Source Commit: $(git rev-parse "$BUILD_COMMIT" 2>/dev/null || echo "Staged build - working tree")
 Commit Message: $BUILD_COMMIT_MSG
 Files: $file_count
 EOF
@@ -2190,7 +2256,7 @@ EOF
             cat > "$build_path/BUILD_INFO.txt" << EOF
 Build Name: $build_name
 Build Date: $(date)
-Source Commit: $(git rev-parse "$BUILD_COMMIT" 2>/dev/null)
+Source Commit: $(git rev-parse "$BUILD_COMMIT" 2>/dev/null || echo "Staged build - working tree")
 Commit Message: $BUILD_COMMIT_MSG
 Files: $file_count
 EOF
@@ -2242,6 +2308,7 @@ show_help() {
   echo "  --tar            Create a tar.gz archive (use with --build)"
   echo "  --config         Interactive file exclusion (use with --build)"
   echo "  --message        Use commit message for build naming (default uses version-based naming)"
+  echo "  --staged         Build from current working tree including uncommitted changes (use with --build)"
   echo "  --version [VER]  Build from a specific version or latest version (use with --build)"
   echo "  --online         Force online package installation using apt/apk instead of local .deb/.apk files"
   echo "  --node           Install only Node.js during package installation (works with --online)"
@@ -2254,6 +2321,8 @@ show_help() {
   echo "  $0 --build --config           Interactive exclusion before directory build"
   echo "  $0 --build --tar --config     Interactive exclusion before tar.gz build"
   echo "  $0 --build --message          Use commit message for naming (default: version-based)"
+  echo "  $0 --build --staged           Build from current working tree with uncommitted changes"
+  echo "  $0 --build --staged --tar     Create tar.gz from current working tree with changes"
   echo "  $0 --build mybuild            Build using saved configuration 'mybuild'"
   echo ""
   echo "BUILD SAVE SYSTEM:"
@@ -2302,6 +2371,7 @@ show_help() {
   echo "BUILD MODE:"
   echo "  Use --build to create a clean snapshot with version-based naming (default)"
   echo "  Use --build --message to use commit message for naming instead"
+  echo "  Use --build --staged to build from current working tree including uncommitted changes"
   echo "  Use --build --tar to create a tar.gz archive instead of directory"
   echo "  Use --build --config for interactive file exclusion before building"
   echo "  Use --build <name> to load a saved configuration before building"
@@ -2330,6 +2400,7 @@ show_help() {
   echo "  Build tar.gz archive:      $0 --build --tar"
   echo "  Interactive build:         $0 --build --config"
   echo "  Build with message name:   $0 --build --message"
+  echo "  Build staged changes:      $0 --build --staged"
   echo "  Force online installation: $0 --online"
   echo "  Install only Node.js:      $0 --node"
   echo "  Reset and reinstall deps:  $0 --resetdep"
@@ -3072,6 +3143,7 @@ for arg in "$@"; do
         --tar) BUILD_TAR=true ;;
         --config) BUILD_CONFIG=true ;;
         --message) BUILD_MESSAGE_MODE=true ;;
+        --staged) BUILD_STAGED=true ;;
         --version) 
             BUILD_MODE=true
             BUILD_VERSION="latest"
@@ -3087,12 +3159,12 @@ for arg in "$@"; do
     esac
     
     # Handle --build with optional save name
-    if [ "$prev_arg" = "--build" ] && [ "$arg" != "--build" ] && [ "$arg" != "--tar" ] && [ "$arg" != "--config" ] && [ "$arg" != "--message" ] && [ "$arg" != "--version" ] && [ "$arg" != "--log" ] && [ "$arg" != "--skip-pkgs" ] && [ "$arg" != "--local-dir" ] && [ "$arg" != "--no-preserve" ] && [ "$arg" != "--online" ] && [ "$arg" != "--node" ] && [ "$arg" != "--resetdep" ] && [ "$arg" != "--movegit" ] && [ "$arg" != "-h" ] && [ "$arg" != "--help" ]; then
+    if [ "$prev_arg" = "--build" ] && [ "$arg" != "--build" ] && [ "$arg" != "--tar" ] && [ "$arg" != "--config" ] && [ "$arg" != "--message" ] && [ "$arg" != "--staged" ] && [ "$arg" != "--version" ] && [ "$arg" != "--log" ] && [ "$arg" != "--skip-pkgs" ] && [ "$arg" != "--local-dir" ] && [ "$arg" != "--no-preserve" ] && [ "$arg" != "--online" ] && [ "$arg" != "--node" ] && [ "$arg" != "--resetdep" ] && [ "$arg" != "--movegit" ] && [ "$arg" != "-h" ] && [ "$arg" != "--help" ]; then
         BUILD_SAVE_NAME="$arg"
     fi
     
     # Handle --version with specific version number
-    if [ "$prev_arg" = "--version" ] && [ "$arg" != "--version" ] && echo "$arg" | grep -qE '^[0-9]+\.[0-9]+'; then
+    if [ "$prev_arg" = "--version" ] && [ "$arg" != "--version" ] && [ "$arg" != "--staged" ] && echo "$arg" | grep -qE '^[0-9]+\.[0-9]+'; then
         BUILD_VERSION="$arg"
     fi
     prev_arg="$arg"
