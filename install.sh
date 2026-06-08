@@ -2188,7 +2188,8 @@ do_build() {
     # Clean up temp files
     rm -f "$EXCLUDE_LIST" "$EXCLUDE_DIRS_LIST" "$BUILD_FILES_LIST" "$BUILD_DIRS_LIST" "$BUILD_EXCLUDE_DIRS_LIST"
     
-    # Create the build
+    
+         # Create the build
     if [ "$BUILD_TAR" = true ]; then
         # Create tar.gz
         tar_file="$build_path.tar.gz"
@@ -2197,8 +2198,15 @@ do_build() {
         # Remove existing archive if present
         [ -f "$tar_file" ] && rm -f "$tar_file"
         
-        cd "$temp_build" || exit 1
-        tar -czf "$tar_file" . 2>/dev/null
+        # IMPROVE/FIX: Create tar.gz that extracts into a named directory
+        # Instead of archiving "." directly, we archive from parent directory
+        # This ensures extraction creates "build_name/" directory
+        cd "/tmp" || exit 1
+        mv "$temp_build" "/tmp/${build_name}"
+        tar -czf "$tar_file" "${build_name}" 2>/dev/null
+        
+        # Move the temp directory back for cleanup
+        mv "/tmp/${build_name}" "$temp_build"
         
         if [ $? -eq 0 ]; then
             log_message "Build archive created successfully: $tar_file"
