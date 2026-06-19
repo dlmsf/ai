@@ -9,6 +9,10 @@ import ConfigManager from "../ConfigManager.js"
 import FreePort from "../useful/FreePort.js"
 import DeepInfra from "../DeepInfra.js"
 import DeepSeek from "../DeepSeek.js"
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 let webgpt_process_name
 let ai_process_name
@@ -18,12 +22,113 @@ process.on('exit',async () => {
     // Normally, PM2 manages the processes
 })
 
+// Helper function to restart a PM2 process using pm2 command directly
+async function restartPM2Process(processName, processType) {
+    if (!processName) return false;
+    
+    try {
+        console.log(`Restarting ${processType}: ${processName}...`);
+        const { stdout } = await execAsync(`pm2 restart ${processName}`);
+        console.log(stdout.trim());
+        return true;
+    } catch (error) {
+        console.log(`⚠️ Failed to restart ${processType}: ${error.message}`);
+        return false;
+    }
+}
+
+// Handle restart functionality
+async function handleRestart(fromMenu = false) {
+    const webgptProcess = ConfigManager.getKey('flash_webgpt_process')
+    const aiProcess = ConfigManager.getKey('flash_webgpt_aiprocess')
+    
+    if (webgptProcess || aiProcess) {
+        if (!fromMenu) console.log('🔄 Restarting WebGPT processes...');
+        
+        let restartSuccess = false;
+        
+        if (webgptProcess) {
+            const processExists = await PM2.Process(webgptProcess);
+            if (processExists) {
+                const success = await restartPM2Process(webgptProcess, 'WebGPT');
+                if (success) {
+                    console.log(`✔️ WebGPT process restarted: ${webgptProcess}`);
+                    restartSuccess = true;
+                }
+            } else {
+                console.log(`⚠️ WebGPT process ${webgptProcess} not found in PM2`);
+                console.log('Cleaning up invalid config...');
+                ConfigManager.deleteKey('flash_webgpt_process');
+            }
+        }
+        
+        if (aiProcess) {
+            const processExists = await PM2.Process(aiProcess);
+            if (processExists) {
+                const success = await restartPM2Process(aiProcess, 'AI Server');
+                if (success) {
+                    console.log(`✔️ AI Server process restarted: ${aiProcess}`);
+                    restartSuccess = true;
+                }
+            } else {
+                console.log(`⚠️ AI Server process ${aiProcess} not found in PM2`);
+                console.log('Cleaning up invalid config...');
+                ConfigManager.deleteKey('flash_webgpt_aiprocess');
+            }
+        }
+        
+        if (restartSuccess) {
+            console.log('✅ Restart complete!');
+        } else if (!webgptProcess && !aiProcess) {
+            console.log('❌ No WebGPT processes found to restart');
+            console.log('💡 Start a WebGPT instance first with: flash_webgpt [model/save]');
+        }
+        
+        return restartSuccess;
+    } else {
+        console.log('❌ No WebGPT processes found to restart');
+        console.log('💡 Start a WebGPT instance first with: flash_webgpt [model/save]');
+        return false;
+    }
+}
+
+const args = process.argv.slice(2);
+
+// Check for restart flags (-r, --r, --restart)
+const restartFlags = ['-r', '--r', '--restart'];
+const shouldRestart = args.some(arg => restartFlags.includes(arg));
+
+if (shouldRestart) {
+    await handleRestart(false);
+    process.exit(0);
+}
+
 if(ConfigManager.getKey('flash_webgpt_aiprocess') || ConfigManager.getKey('flash_webgpt_process')){
     let cli = new TerminalHUD()
 
     let menu = () => ({
         title : 'Flash WebGPT',
         options : [
+            {
+            name : '🔄 Restart Webgpt',
+            action : async () =>{
+                console.clear()
+                console.log('🔄 Restarting WebGPT processes...')
+                
+                await handleRestart(true);
+                
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                console.clear();
+                
+                // Check if any processes still exist before showing menu
+                if (ConfigManager.getKey('flash_webgpt_process') || ConfigManager.getKey('flash_webgpt_aiprocess')) {
+                    cli.displayMenu(menu);
+                } else {
+                    console.log('No active processes. Exiting...');
+                    process.exit(0);
+                }
+            }
+            },
             {
             name : '❌ Close Webgpt',
             action : async () =>{
@@ -52,8 +157,6 @@ if(ConfigManager.getKey('flash_webgpt_aiprocess') || ConfigManager.getKey('flash
 
 } else {
 
-const args = process.argv.slice(2);
-
 if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
     let toload = (args.length > 0) ? args[0] : ConfigManager.getKey('defaultwebgptsave')
     
@@ -73,6 +176,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com OpenAI!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
                 process.exit(0)
                 
             } else if (toload.toLowerCase() == 'deepinfra' && ConfigManager.getKey('deepinfra')) {
@@ -86,6 +190,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
                 process.exit(0)
                 
             } else if (toload.toLowerCase() == 'deepseek' && ConfigManager.getKey('deepseek')) {
@@ -99,6 +204,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
                 process.exit(0)
             }
         } else {
@@ -129,6 +235,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com OpenAI!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
                 process.exit(0)
                 
             } else if(toload.toLowerCase() == 'deepinfra'){
@@ -154,6 +261,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
                 process.exit(0)
                 
             } else if(toload.toLowerCase() == 'deepseek'){
@@ -179,6 +287,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
                 ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                 console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
                 console.log(`📡 Process ID: ${webgpt_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
                 process.exit(0)
             }
         }
@@ -206,6 +315,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
             console.log('✔️ WebGPT Server iniciado com sucesso!')
             console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
             console.log(`📡 AI Server Process: ${ai_process_name}`)
+            console.log('💡 Use -r flag to restart: flash_webgpt -r')
             process.exit(0)
         }).catch(async e => {
             console.log(`Save ${ColorText.red(args[0])} não foi encontrado`)
@@ -228,6 +338,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
             console.log('✔️ Servers iniciados com sucesso!')
             console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
             console.log(`📡 AI Server Process: ${ai_process_name}`)
+            console.log('💡 Use -r flag to restart: flash_webgpt -r')
             process.exit(0)
         })
     }
@@ -250,6 +361,7 @@ if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
     console.log('✔️ Servers iniciados com sucesso!')
     console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
     console.log(`📡 AI Server Process: ${ai_process_name}`)
+    console.log('💡 Use -r flag to restart: flash_webgpt -r')
     process.exit(0)
 }
 
