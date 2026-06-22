@@ -25,6 +25,8 @@ ONLINE_MODE=false
 NODE_ONLY=false
 RESET_DEP=false
 MOVE_GIT=false
+SYNC_MODELS=false
+UPDATE_FORCE=false
 BUILD_SAVE_FILE="$REPO_DIR/buildsaves.cfg"
 
 # =============================================================================
@@ -308,8 +310,7 @@ list_saved_configurations() {
             \[SAVE:*)
                 name=$(echo "$line" | sed 's/^\[SAVE://;s/\]$//')
                 count=$((count + 1))
-                printf "  %2s. %s
-" "$count" "$name"
+                printf "  %2s. %s\n" "$count" "$name"
                 ;;
         esac
     done < "$BUILD_SAVE_FILE"
@@ -623,8 +624,7 @@ navigate_filesystem_for_inclusion() {
                     already_included="[ALREADY INCLUDED]"
                 fi
                 
-                printf "  %2s. [FILE] %8s %s %s %s
-" "$item_num" "$size_display" "$base" "$is_gitignored" "$already_included"
+                printf "  %2s. [FILE] %8s %s %s %s\n" "$item_num" "$size_display" "$base" "$is_gitignored" "$already_included"
                 echo "${item_num}|FILE|${item}" >> "$NAV_ITEMS"
                 item_num=$((item_num + 1))
             fi
@@ -802,11 +802,9 @@ build_config_interface() {
                 fi
                 case "$1" in
                     *.js|*.sh|*.py|*.rb|*.php|*.ts|*.jsx|*.tsx|*.css|*.html|*.json|*.xml|*.yml|*.yaml|*.md|*.txt|*.conf|*.cfg|*.ini)
-                        printf "%s|%s|C
-" "$size" "$1" ;;
+                        printf "%s|%s|C\n" "$size" "$1" ;;
                     *)
-                        printf "%s|%s|D
-" "$size" "$1" ;;
+                        printf "%s|%s|D\n" "$size" "$1" ;;
                 esac
             ' _ {} 2>/dev/null | sort -t'|' -k1 -n -r > "$BUILD_FILES_LIST"
             
@@ -1216,8 +1214,7 @@ build_config_interface() {
                         [ "$line_num" -gt "$end_line" ] && break
                         [ -z "$filename" ] && continue
                         size_display=$(format_file_size "$size_bytes")
-                        printf "  %2s. %8s  %s
-" "$counter" "$size_display" "$filename"
+                        printf "  %2s. %8s  %s\n" "$counter" "$size_display" "$filename"
                         counter=$((counter + 1))
                     done < "$AVAILABLE_LIST"
                     echo ""; echo "n=next p=previous b=back"
@@ -1268,8 +1265,7 @@ build_config_interface() {
                         counter=1
                         while IFS='|' read -r size_bytes filename; do
                             size_display=$(format_file_size "$size_bytes")
-                            printf "  %2s. %8s  %s
-" "$counter" "$size_display" "$filename"
+                            printf "  %2s. %8s  %s\n" "$counter" "$size_display" "$filename"
                             counter=$((counter + 1))
                         done < "$SEARCH_RESULTS"
                         echo ""; echo "Enter number to exclude | a=exclude all | b=back"
@@ -1306,8 +1302,7 @@ build_config_interface() {
                     counter=1
                     > "/tmp/build_remove_$$.txt"
                     while IFS= read -r file; do
-                        printf "  %2s. %s
-" "$counter" "$file"
+                        printf "  %2s. %s\n" "$counter" "$file"
                         echo "${counter}|${file}" >> "/tmp/build_remove_$$.txt"
                         counter=$((counter + 1))
                     done < "$EXCLUDE_LIST"
@@ -1338,8 +1333,7 @@ build_config_interface() {
                     counter=1
                     > "/tmp/build_remove_dirs_$$.txt"
                     while IFS= read -r dir; do
-                        printf "  %2s. %s
-" "$counter" "$dir"
+                        printf "  %2s. %s\n" "$counter" "$dir"
                         echo "${counter}|${dir}" >> "/tmp/build_remove_dirs_$$.txt"
                         counter=$((counter + 1))
                     done < "$EXCLUDE_DIRS_LIST"
@@ -1438,8 +1432,7 @@ build_config_interface() {
                         short_hash=$(echo "$hash" | cut -c1-7)
                         shortened_msg=$(echo "$msg" | cut -c1-30)
                         marker=""; [ -n "$SELECTED_COMMIT" ] && [ "$hash" = "$SELECTED_COMMIT" ] && marker=" << SELECTED"
-                        printf "  %2s. %8s %s %s %s%s
-" "$counter" "$size_display" "$short_hash" "$date" "$shortened_msg" "$marker"
+                        printf "  %2s. %8s %s %s %s%s\n" "$counter" "$size_display" "$short_hash" "$date" "$shortened_msg" "$marker"
                         echo "${counter}|${hash}|${msg}" >> "/tmp/build_commit_map_$$.txt"
                         counter=$((counter+1))
                     done < "$FILTERED_COMMITS"
@@ -1463,8 +1456,7 @@ build_config_interface() {
                                     [ "$month_counter" -lt "$month_start" ] && month_counter=$((month_counter+1)) && continue
                                     [ "$month_counter" -gt "$month_end" ] && break
                                     marker=""; [ "$ym" = "$date_filter" ] && marker=" << SELECTED"
-                                    printf "  %2s. %s %s (%s commits)%s
-" "$month_counter" "$month_name" "$year" "$commit_count" "$marker"
+                                    printf "  %2s. %s %s (%s commits)%s\n" "$month_counter" "$month_name" "$year" "$commit_count" "$marker"
                                     month_counter=$((month_counter+1))
                                 done < "$MONTH_CACHE"
                                 echo ""; echo "n=next p=previous c=clear b=back"
@@ -1534,8 +1526,7 @@ build_config_interface() {
                 while IFS= read -r line; do
                     case "$line" in
                         \[SAVE:*) name=$(echo "$line" | sed 's/^\[SAVE://;s/\]$//')
-                            printf "  %2s. %s
-" "$save_number" "$name"
+                            printf "  %2s. %s\n" "$save_number" "$name"
                             echo "${save_number}|${name}" >> "$SAVE_COUNT_FILE"
                             save_number=$((save_number+1)) ;;
                     esac
@@ -1578,8 +1569,7 @@ build_config_interface() {
                 while IFS= read -r line; do
                     case "$line" in
                         \[SAVE:*) name=$(echo "$line" | sed 's/^\[SAVE://;s/\]$//')
-                            printf "  %2s. %s
-" "$save_number" "$name"
+                            printf "  %2s. %s\n" "$save_number" "$name"
                             echo "${save_number}|${name}" >> "$SAVE_COUNT_FILE"
                             save_number=$((save_number+1)) ;;
                     esac
@@ -2103,6 +2093,8 @@ show_help() {
   echo "  --node           Install only Node.js during package installation (works with --online)"
   echo "  --resetdep       Completely remove and reinstall dependencies from scratch"
   echo "  --movegit        Move .git directory to installation directory (default: excluded)"
+  echo "  --sync           Sync models from caller's models directory to installation during update"
+  echo "  --update-force   Force update without showing the update menu"
   echo ""
   echo "BUILD EXAMPLES:"
   echo "  $0 --build                    Create build directory from last commit"
@@ -2179,6 +2171,12 @@ show_help() {
   echo "  Use --online to force online installation using the system package manager."
   echo "  On Ubuntu/WSL, online installation is automatically enabled (no --online needed)."
   echo ""
+  echo "MODEL SYNCHRONIZATION:"
+  echo "  First install: Models from caller's ./models directory are automatically copied"
+  echo "  Update with --sync: New models from caller's ./models are copied to installation"
+  echo "  Update with --update-force: Skip update menu and proceed directly with update"
+  echo "  Combined usage: $0 --update-force --sync"
+  echo ""
   echo "EXAMPLES:"
   echo "  Normal installation:        $0"
   echo "  Installation with logging:  $0 --log"
@@ -2195,6 +2193,7 @@ show_help() {
   echo "  Reset and reinstall deps:  $0 --resetdep"
   echo "  Include .git directory:    $0 --movegit"
   echo "  Build from saved config:   $0 --build myconfig"
+  echo "  Force update with sync:    $0 --update-force --sync"
   echo ""
   echo "NOTE:"
   echo "  If you modify this script or add new parameters, please update this help section."
@@ -2237,8 +2236,7 @@ show_progress() {
     # Check for user input with timeout
     if read -t 0.1 -n 1 -s input 2>/dev/null; then
       if [ "$input" = "x" ]; then
-        printf "
-Skipping step...\n"
+        printf "\nSkipping step...\n"
         kill "$pid" 2>/dev/null
         wait "$pid" 2>/dev/null
         break
@@ -2650,6 +2648,52 @@ remove_links() {
   done
 }
 
+# =============================================================================
+# FUNCTION: Sync models from caller directory to installation
+# =============================================================================
+sync_models() {
+    caller_models="$REPO_DIR/models"
+    install_models="$INSTALL_DIR/models"
+    
+    if [ ! -d "$caller_models" ]; then
+        log_message "No models directory found at caller path: $caller_models"
+        return 0
+    fi
+    
+    log_message "Syncing models from $caller_models to $install_models"
+    
+    # Create installation models directory if it doesn't exist
+    mkdir -p "$install_models"
+    
+    # Count models being synced
+    model_count=0
+    new_model_count=0
+    
+    # Copy models that don't exist in installation or are newer
+    for model_file in "$caller_models"/*; do
+        [ ! -f "$model_file" ] && continue
+        
+        model_name=$(basename "$model_file")
+        install_model="$install_models/$model_name"
+        
+        if [ ! -f "$install_model" ]; then
+            log_message "  Copying new model: $model_name"
+            cp -p "$model_file" "$install_model"
+            new_model_count=$((new_model_count + 1))
+        elif [ "$model_file" -nt "$install_model" ]; then
+            log_message "  Updating newer model: $model_name"
+            cp -p "$model_file" "$install_model"
+            new_model_count=$((new_model_count + 1))
+        else
+            log_message "  Model already exists and is current: $model_name"
+        fi
+        model_count=$((model_count + 1))
+    done
+    
+    log_message "Model sync complete. Processed $model_count models, $new_model_count copied/updated."
+    return 0
+}
+
 # Function to preserve whitelisted files by moving them from backup
 preserve_files_from_backup() {
   if [ "$PRESERVE_DATA" = false ]; then
@@ -2933,6 +2977,8 @@ for arg in "$@"; do
         --config) BUILD_CONFIG=true ;;
         --message) BUILD_MESSAGE_MODE=true ;;
         --staged) BUILD_STAGED=true ;;
+        --sync) SYNC_MODELS=true ;;
+        --update-force) UPDATE_FORCE=true ;;
         --version) 
             BUILD_MODE=true
             BUILD_VERSION="latest"
@@ -2948,7 +2994,7 @@ for arg in "$@"; do
     esac
     
     # Handle --build with optional save name
-    if [ "$prev_arg" = "--build" ] && [ "$arg" != "--build" ] && [ "$arg" != "--tar" ] && [ "$arg" != "--config" ] && [ "$arg" != "--message" ] && [ "$arg" != "--staged" ] && [ "$arg" != "--version" ] && [ "$arg" != "--log" ] && [ "$arg" != "--skip-pkgs" ] && [ "$arg" != "--local-dir" ] && [ "$arg" != "--no-preserve" ] && [ "$arg" != "--online" ] && [ "$arg" != "--node" ] && [ "$arg" != "--resetdep" ] && [ "$arg" != "--movegit" ] && [ "$arg" != "-h" ] && [ "$arg" != "--help" ]; then
+    if [ "$prev_arg" = "--build" ] && [ "$arg" != "--build" ] && [ "$arg" != "--tar" ] && [ "$arg" != "--config" ] && [ "$arg" != "--message" ] && [ "$arg" != "--staged" ] && [ "$arg" != "--sync" ] && [ "$arg" != "--update-force" ] && [ "$arg" != "--version" ] && [ "$arg" != "--log" ] && [ "$arg" != "--skip-pkgs" ] && [ "$arg" != "--local-dir" ] && [ "$arg" != "--no-preserve" ] && [ "$arg" != "--online" ] && [ "$arg" != "--node" ] && [ "$arg" != "--resetdep" ] && [ "$arg" != "--movegit" ] && [ "$arg" != "-h" ] && [ "$arg" != "--help" ]; then
         BUILD_SAVE_NAME="$arg"
     fi
     
@@ -2994,40 +3040,27 @@ if [ "$BUILD_MODE" = true ]; then
     do_build
 fi
 
-# Check if EasyAI is already installed and force skip packages if it is
+# Check if EasyAI is already installed
 if check_installed; then
-  log_message "EasyAI is already installed. Forcing package installation skip."
-  SKIP_PKGS=true
-fi
-
-# =============================================================================
-# EXECUTE PRE-INSTALL SCRIPTS (with same command line)
-# =============================================================================
-execute_pre_install_scripts "$@"
-
-# Install packages based on OS (will be skipped if already installed or --skip-pkgs used)
-install_packages
-
-# Run package configuration if not skipping package installation
-if [ "$SKIP_PKGS" = false ] && [ "$OS_TYPE" = "ubuntu" ]; then
-  log_message "Running dpkg --configure -a..."
-  if [ "$LOG_MODE" = true ]; then
-    sudo dpkg --configure -a &
+  log_message "EasyAI is already installed."
+  
+  # If --update-force is specified, force update without menu
+  if [ "$UPDATE_FORCE" = true ]; then
+    log_message "--update-force specified. Forcing update without menu."
+    choice="1"
   else
-    sudo dpkg --configure -a > /dev/null 2>&1 &
+    # Force package installation skip
+    SKIP_PKGS=true
+    
+    log_message "Choose an option:"
+    log_message "1. Update (replace existing files)"
+    log_message "2. Remove (delete the existing folder and symbolic links)"
+    log_message "3. Exit (cancel setup)"
+
+    printf "Enter your choice (1/2/3): "
+    read choice
   fi
-  show_progress "Configuring packages" $!
-fi
-
-# Check if the installation directory already exists
-if [ -d "$INSTALL_DIR" ]; then
-  log_message "The EasyAI folder already exists. Choose an option:"
-  log_message "1. Update (replace existing files)"
-  log_message "2. Remove (delete the existing folder and symbolic links)"
-  log_message "3. Exit (cancel setup)"
-
-  printf "Enter your choice (1/2/3): "
-  read choice
+  
   case "$choice" in
     1)
       log_message "Updating the existing installation..."
@@ -3053,7 +3086,26 @@ if [ -d "$INSTALL_DIR" ]; then
   esac
 fi
 
-# Proceed with global installation
+# =============================================================================
+# EXECUTE PRE-INSTALL SCRIPTS (with same command line)
+# =============================================================================
+execute_pre_install_scripts "$@"
+
+# Install packages based on OS (will be skipped if already installed or --skip-pkgs used)
+install_packages
+
+# Run package configuration if not skipping package installation
+if [ "$SKIP_PKGS" = false ] && [ "$OS_TYPE" = "ubuntu" ]; then
+  log_message "Running dpkg --configure -a..."
+  if [ "$LOG_MODE" = true ]; then
+    sudo dpkg --configure -a &
+  else
+    sudo dpkg --configure -a > /dev/null 2>&1 &
+  fi
+  show_progress "Configuring packages" $!
+fi
+
+# Proceed with installation
 log_message "Creating installation directory..."
 mkdir -p "$INSTALL_DIR"
 
@@ -3152,6 +3204,38 @@ fi
 # Restore preserved files from backup if this was an update
 preserve_files_from_backup
 
+# =============================================================================
+# MODEL SYNCHRONIZATION LOGIC
+# =============================================================================
+if [ -d "$BACKUP_DIR" ]; then
+    # This is an update (backup directory exists from previous move)
+    if [ "$SYNC_MODELS" = true ]; then
+        log_message "Update mode with --sync flag. Syncing models from caller directory..."
+        sync_models
+    else
+        log_message "Update mode without --sync flag. Models preserved from backup (if any)."
+    fi
+else
+    # This is a fresh install (no backup directory)
+    log_message "Fresh installation detected. Auto-syncing models from caller directory if available..."
+    if [ -d "$REPO_DIR/models" ]; then
+        # Check if there are actual model files (not just empty directory)
+        model_files_exist=false
+        for model_file in "$REPO_DIR/models"/*; do
+            [ -f "$model_file" ] && model_files_exist=true && break
+        done
+        
+        if [ "$model_files_exist" = true ]; then
+            log_message "Models found in caller directory. Auto-syncing..."
+            sync_models
+        else
+            log_message "Models directory exists but is empty. Skipping sync."
+        fi
+    else
+        log_message "No models directory found at caller path. Skipping sync."
+    fi
+fi
+
 # Extract the pm2 tar.gz file
 if [ -f "$PM2_TAR_GZ" ]; then
   log_message "Extracting $PM2_TAR_GZ to $PM2_EXTRACT_DIR..."
@@ -3201,6 +3285,10 @@ fi
 
 if [ "$PRESERVE_DATA" = true ] && [ -d "$BACKUP_DIR" ]; then
   log_message "Note: Whitelisted files were preserved during update"
+fi
+
+if [ "$SYNC_MODELS" = true ]; then
+  log_message "Note: Models were synced from caller directory (--sync mode)"
 fi
 
 # Display package installation method information
