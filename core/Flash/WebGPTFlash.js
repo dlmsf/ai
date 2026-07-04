@@ -77,18 +77,248 @@ async function handleRestart(fromMenu = false) {
             }
         }
         
+        // After cleanup, check if any processes remain
+        const remainingWebgpt = ConfigManager.getKey('flash_webgpt_process');
+        const remainingAi = ConfigManager.getKey('flash_webgpt_aiprocess');
+        
+        if (!remainingWebgpt && !remainingAi) {
+            if (!fromMenu) {
+                console.log('No active processes found. Starting a new instance...');
+                const args = process.argv.slice(2);
+                const nonRestartArgs = args.filter(arg => !['-r', '--r', '--restart'].includes(arg));
+                await startWebGPT(nonRestartArgs);
+                return true;
+            }
+        }
+        
         if (restartSuccess) {
             console.log('✅ Restart complete!');
-        } else if (!webgptProcess && !aiProcess) {
-            console.log('❌ No WebGPT processes found to restart');
-            console.log('💡 Start a WebGPT instance first with: flash_webgpt [model/save]');
         }
         
         return restartSuccess;
     } else {
-        console.log('❌ No WebGPT processes found to restart');
-        console.log('💡 Start a WebGPT instance first with: flash_webgpt [model/save]');
-        return false;
+        if (!fromMenu) {
+            console.log('No WebGPT processes found. Starting a new instance...');
+            const args = process.argv.slice(2);
+            const nonRestartArgs = args.filter(arg => !['-r', '--r', '--restart'].includes(arg));
+            await startWebGPT(nonRestartArgs);
+            return true;
+        } else {
+            console.log('❌ No WebGPT processes found to restart');
+            console.log('💡 Start a WebGPT instance first with: flash_webgpt [model/save]');
+            return false;
+        }
+    }
+}
+
+// Extract the startup logic into a reusable function
+async function startWebGPT(argsToUse) {
+    if (argsToUse.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
+        let toload = (argsToUse.length > 0) ? argsToUse[0] : ConfigManager.getKey('defaultwebgptsave')
+        
+        if(toload.toLowerCase() == 'openai' || toload.toLowerCase() == 'deepinfra' || toload.toLowerCase() == 'deepseek'){
+            if((ConfigManager.getKey('openai') && toload.toLowerCase() == 'openai') || 
+               (ConfigManager.getKey('deepinfra') && toload.toLowerCase() == 'deepinfra') ||
+               (ConfigManager.getKey('deepseek') && toload.toLowerCase() == 'deepseek')){
+                
+                if(toload.toLowerCase() == 'openai' && ConfigManager.getKey('openai')){
+                    let openai_info = ConfigManager.getKey('openai')
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        openai_token: openai_info.token, 
+                        openai_model: openai_info.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com OpenAI!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                    
+                } else if (toload.toLowerCase() == 'deepinfra' && ConfigManager.getKey('deepinfra')) {
+                    let deepinfra_info = ConfigManager.getKey('deepinfra')
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        deepinfra_token: deepinfra_info.token, 
+                        deepinfra_model: deepinfra_info.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                    
+                } else if (toload.toLowerCase() == 'deepseek' && ConfigManager.getKey('deepseek')) {
+                    let deepseek_info = ConfigManager.getKey('deepseek')
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        deepseek_token: deepseek_info.token, 
+                        deepseek_model: deepseek_info.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                }
+            } else {
+                // Handle case where config doesn't exist
+                let cli = new TerminalHUD()
+                let final_object = {}
+
+                if(toload.toLowerCase() == 'openai'){
+                    final_object.token = await cli.ask('OpenAI Token: ')
+                    final_object.model = await cli.ask('Select the model', {
+                        options: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview', 'gpt-3.5-turbo-instruct']
+                    })
+                    let save = await cli.ask('Save the OpenAI config? ', {
+                        options: ['yes', 'no']
+                    })
+                    if(save == 'yes'){
+                        ConfigManager.setKey('openai', final_object)
+                    }
+                    cli.close()
+                    console.clear()
+                    
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        openai_token: final_object.token, 
+                        openai_model: final_object.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com OpenAI!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                    
+                } else if(toload.toLowerCase() == 'deepinfra'){
+                    final_object.token = await cli.ask('DeepInfra Token: ')
+                    final_object.model = await cli.ask('Select the model', {
+                        options: DeepInfra.Models
+                    })
+                    let save = await cli.ask('Save the DeepInfra config? ', {
+                        options: ['yes', 'no']
+                    })
+                    if(save == 'yes'){
+                        ConfigManager.setKey('deepinfra', final_object)
+                    }
+                    cli.close()
+                    console.clear()
+                    
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        deepinfra_token: final_object.token, 
+                        deepinfra_model: final_object.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                    
+                } else if(toload.toLowerCase() == 'deepseek'){
+                    final_object.token = await cli.ask('DeepSeek Token: ')
+                    final_object.model = await cli.ask('Select the model', {
+                        options: DeepSeek.Models
+                    })
+                    let save = await cli.ask('Save the DeepSeek config? ', {
+                        options: ['yes', 'no']
+                    })
+                    if(save == 'yes'){
+                        ConfigManager.setKey('deepseek', final_object)
+                    }
+                    cli.close()
+                    console.clear()
+                    
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        deepseek_token: final_object.token, 
+                        deepseek_model: final_object.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                }
+            }
+        } else {
+            // Handle saved server configuration
+            await ServerSaves.Load(toload)
+            .then(async (save) => {
+                // Start the AI server first
+                ai_process_name = await EasyAI.Server.PM2({
+                    token: save.Token,
+                    port: save.Port,
+                    EasyAI_Config: save.EasyAI_Config
+                })
+                ConfigManager.setKey('flash_webgpt_aiprocess', ai_process_name)
+                console.log('✔️ PM2 Server iniciado com sucesso!')
+                
+                // Then start WebGPT pointing to it
+                let webgpt_port = save.Webgpt_Port || await FreePort(3000)
+                webgpt_process_name = await EasyAI.WebGPT.PM2({
+                    port: webgpt_port,
+                    easyai_url: 'localhost',
+                    easyai_port: save.Port
+                })
+                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                console.log('✔️ WebGPT Server iniciado com sucesso!')
+                console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
+                console.log(`📡 AI Server Process: ${ai_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                process.exit(0)
+            }).catch(async e => {
+                console.log(`Save ${ColorText.red(argsToUse[0])} não foi encontrado`)
+                
+                // Default fallback: start both servers
+                let ai_port = await FreePort(4000)
+                ai_process_name = await EasyAI.Server.PM2({
+                    handle_port: false,
+                    port: ai_port
+                })
+                ConfigManager.setKey('flash_webgpt_aiprocess', ai_process_name)
+                
+                let webgpt_port = await FreePort(3000)
+                webgpt_process_name = await EasyAI.WebGPT.PM2({
+                    port: webgpt_port,
+                    easyai_url: 'localhost',
+                    easyai_port: ai_port
+                })
+                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                console.log('✔️ Servers iniciados com sucesso!')
+                console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
+                console.log(`📡 AI Server Process: ${ai_process_name}`)
+                console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                process.exit(0)
+            })
+        }
+    } else {
+        // Default case: start local server and WebGPT
+        let ai_port = await FreePort(4000)
+        ai_process_name = await EasyAI.Server.PM2({
+            handle_port: false,
+            port: ai_port
+        })
+        ConfigManager.setKey('flash_webgpt_aiprocess', ai_process_name)
+        
+        let webgpt_port = await FreePort(3000)
+        webgpt_process_name = await EasyAI.WebGPT.PM2({
+            port: webgpt_port,
+            easyai_url: 'localhost',
+            easyai_port: ai_port
+        })
+        ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+        console.log('✔️ Servers iniciados com sucesso!')
+        console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
+        console.log(`📡 AI Server Process: ${ai_process_name}`)
+        console.log('💡 Use -r flag to restart: flash_webgpt -r')
+        process.exit(0)
     }
 }
 
@@ -103,7 +333,32 @@ if (shouldRestart) {
     process.exit(0);
 }
 
-if(ConfigManager.getKey('flash_webgpt_aiprocess') || ConfigManager.getKey('flash_webgpt_process')){
+// Check if there are active processes by verifying with PM2
+const webgptProcess = ConfigManager.getKey('flash_webgpt_process');
+const aiProcess = ConfigManager.getKey('flash_webgpt_aiprocess');
+let hasActiveProcess = false;
+
+if (webgptProcess) {
+    const webgptExists = await PM2.Process(webgptProcess);
+    if (webgptExists) {
+        hasActiveProcess = true;
+    } else {
+        // Clean up invalid config
+        ConfigManager.deleteKey('flash_webgpt_process');
+    }
+}
+
+if (aiProcess) {
+    const aiExists = await PM2.Process(aiProcess);
+    if (aiExists) {
+        hasActiveProcess = true;
+    } else {
+        // Clean up invalid config
+        ConfigManager.deleteKey('flash_webgpt_aiprocess');
+    }
+}
+
+if(hasActiveProcess){
     let cli = new TerminalHUD()
 
     let menu = () => ({
@@ -156,213 +411,6 @@ if(ConfigManager.getKey('flash_webgpt_aiprocess') || ConfigManager.getKey('flash
     cli.displayMenu(menu)
 
 } else {
-
-if (args.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
-    let toload = (args.length > 0) ? args[0] : ConfigManager.getKey('defaultwebgptsave')
-    
-    if(toload.toLowerCase() == 'openai' || toload.toLowerCase() == 'deepinfra' || toload.toLowerCase() == 'deepseek'){
-        if((ConfigManager.getKey('openai') && toload.toLowerCase() == 'openai') || 
-           (ConfigManager.getKey('deepinfra') && toload.toLowerCase() == 'deepinfra') ||
-           (ConfigManager.getKey('deepseek') && toload.toLowerCase() == 'deepseek')){
-            
-            if(toload.toLowerCase() == 'openai' && ConfigManager.getKey('openai')){
-                let openai_info = ConfigManager.getKey('openai')
-                let port = await FreePort(3000)
-                webgpt_process_name = await EasyAI.WebGPT.PM2({
-                    port: port,
-                    openai_token: openai_info.token, 
-                    openai_model: openai_info.model
-                })
-                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-                console.log('✔️ WebGPT Server iniciado com sucesso com OpenAI!')
-                console.log(`📡 Process ID: ${webgpt_process_name}`)
-                console.log('💡 Use -r flag to restart: flash_webgpt -r')
-                process.exit(0)
-                
-            } else if (toload.toLowerCase() == 'deepinfra' && ConfigManager.getKey('deepinfra')) {
-                let deepinfra_info = ConfigManager.getKey('deepinfra')
-                let port = await FreePort(3000)
-                webgpt_process_name = await EasyAI.WebGPT.PM2({
-                    port: port,
-                    deepinfra_token: deepinfra_info.token, 
-                    deepinfra_model: deepinfra_info.model
-                })
-                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-                console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
-                console.log(`📡 Process ID: ${webgpt_process_name}`)
-                console.log('💡 Use -r flag to restart: flash_webgpt -r')
-                process.exit(0)
-                
-            } else if (toload.toLowerCase() == 'deepseek' && ConfigManager.getKey('deepseek')) {
-                let deepseek_info = ConfigManager.getKey('deepseek')
-                let port = await FreePort(3000)
-                webgpt_process_name = await EasyAI.WebGPT.PM2({
-                    port: port,
-                    deepseek_token: deepseek_info.token, 
-                    deepseek_model: deepseek_info.model
-                })
-                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-                console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
-                console.log(`📡 Process ID: ${webgpt_process_name}`)
-                console.log('💡 Use -r flag to restart: flash_webgpt -r')
-                process.exit(0)
-            }
-        } else {
-            // Handle case where config doesn't exist
-            let cli = new TerminalHUD()
-            let final_object = {}
-
-            if(toload.toLowerCase() == 'openai'){
-                final_object.token = await cli.ask('OpenAI Token: ')
-                final_object.model = await cli.ask('Select the model', {
-                    options: ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo-preview', 'gpt-3.5-turbo-instruct']
-                })
-                let save = await cli.ask('Save the OpenAI config? ', {
-                    options: ['yes', 'no']
-                })
-                if(save == 'yes'){
-                    ConfigManager.setKey('openai', final_object)
-                }
-                cli.close()
-                console.clear()
-                
-                let port = await FreePort(3000)
-                webgpt_process_name = await EasyAI.WebGPT.PM2({
-                    port: port,
-                    openai_token: final_object.token, 
-                    openai_model: final_object.model
-                })
-                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-                console.log('✔️ WebGPT Server iniciado com sucesso com OpenAI!')
-                console.log(`📡 Process ID: ${webgpt_process_name}`)
-                console.log('💡 Use -r flag to restart: flash_webgpt -r')
-                process.exit(0)
-                
-            } else if(toload.toLowerCase() == 'deepinfra'){
-                final_object.token = await cli.ask('DeepInfra Token: ')
-                final_object.model = await cli.ask('Select the model', {
-                    options: DeepInfra.Models
-                })
-                let save = await cli.ask('Save the DeepInfra config? ', {
-                    options: ['yes', 'no']
-                })
-                if(save == 'yes'){
-                    ConfigManager.setKey('deepinfra', final_object)
-                }
-                cli.close()
-                console.clear()
-                
-                let port = await FreePort(3000)
-                webgpt_process_name = await EasyAI.WebGPT.PM2({
-                    port: port,
-                    deepinfra_token: final_object.token, 
-                    deepinfra_model: final_object.model
-                })
-                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-                console.log('✔️ WebGPT Server iniciado com sucesso com DeepInfra!')
-                console.log(`📡 Process ID: ${webgpt_process_name}`)
-                console.log('💡 Use -r flag to restart: flash_webgpt -r')
-                process.exit(0)
-                
-            } else if(toload.toLowerCase() == 'deepseek'){
-                final_object.token = await cli.ask('DeepSeek Token: ')
-                final_object.model = await cli.ask('Select the model', {
-                    options: DeepSeek.Models
-                })
-                let save = await cli.ask('Save the DeepSeek config? ', {
-                    options: ['yes', 'no']
-                })
-                if(save == 'yes'){
-                    ConfigManager.setKey('deepseek', final_object)
-                }
-                cli.close()
-                console.clear()
-                
-                let port = await FreePort(3000)
-                webgpt_process_name = await EasyAI.WebGPT.PM2({
-                    port: port,
-                    deepseek_token: final_object.token, 
-                    deepseek_model: final_object.model
-                })
-                ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-                console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
-                console.log(`📡 Process ID: ${webgpt_process_name}`)
-                console.log('💡 Use -r flag to restart: flash_webgpt -r')
-                process.exit(0)
-            }
-        }
-    } else {
-        // Handle saved server configuration
-        await ServerSaves.Load(toload)
-        .then(async (save) => {
-            // Start the AI server first
-            ai_process_name = await EasyAI.Server.PM2({
-                token: save.Token,
-                port: save.Port,
-                EasyAI_Config: save.EasyAI_Config
-            })
-            ConfigManager.setKey('flash_webgpt_aiprocess', ai_process_name)
-            console.log('✔️ PM2 Server iniciado com sucesso!')
-            
-            // Then start WebGPT pointing to it
-            let webgpt_port = save.Webgpt_Port || await FreePort(3000)
-            webgpt_process_name = await EasyAI.WebGPT.PM2({
-                port: webgpt_port,
-                easyai_url: 'localhost',
-                easyai_port: save.Port
-            })
-            ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-            console.log('✔️ WebGPT Server iniciado com sucesso!')
-            console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
-            console.log(`📡 AI Server Process: ${ai_process_name}`)
-            console.log('💡 Use -r flag to restart: flash_webgpt -r')
-            process.exit(0)
-        }).catch(async e => {
-            console.log(`Save ${ColorText.red(args[0])} não foi encontrado`)
-            
-            // Default fallback: start both servers
-            let ai_port = await FreePort(4000)
-            ai_process_name = await EasyAI.Server.PM2({
-                handle_port: false,
-                port: ai_port
-            })
-            ConfigManager.setKey('flash_webgpt_aiprocess', ai_process_name)
-            
-            let webgpt_port = await FreePort(3000)
-            webgpt_process_name = await EasyAI.WebGPT.PM2({
-                port: webgpt_port,
-                easyai_url: 'localhost',
-                easyai_port: ai_port
-            })
-            ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-            console.log('✔️ Servers iniciados com sucesso!')
-            console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
-            console.log(`📡 AI Server Process: ${ai_process_name}`)
-            console.log('💡 Use -r flag to restart: flash_webgpt -r')
-            process.exit(0)
-        })
-    }
-} else {
-    // Default case: start local server and WebGPT
-    let ai_port = await FreePort(4000)
-    ai_process_name = await EasyAI.Server.PM2({
-        handle_port: false,
-        port: ai_port
-    })
-    ConfigManager.setKey('flash_webgpt_aiprocess', ai_process_name)
-    
-    let webgpt_port = await FreePort(3000)
-    webgpt_process_name = await EasyAI.WebGPT.PM2({
-        port: webgpt_port,
-        easyai_url: 'localhost',
-        easyai_port: ai_port
-    })
-    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
-    console.log('✔️ Servers iniciados com sucesso!')
-    console.log(`📡 WebGPT Process: ${webgpt_process_name}`)
-    console.log(`📡 AI Server Process: ${ai_process_name}`)
-    console.log('💡 Use -r flag to restart: flash_webgpt -r')
-    process.exit(0)
-}
-
+    // No active processes, start fresh
+    await startWebGPT(args);
 }
