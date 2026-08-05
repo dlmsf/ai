@@ -89,7 +89,7 @@ class DeepInfra {
     constructor(apiToken, config = {}) {
         this.apiToken = apiToken;
         this.config = config;
-        this.model = config.model || 'Qwen/Qwen3-235B-A22B-Instruct-2507';
+        this.model = config.model || 'meta-llama/Meta-Llama-3.1-8B-Instruct';
         this.baseUrl = config.baseUrl || 'api.deepinfra.com';
         this.Log = config.log || false;
     }
@@ -206,6 +206,9 @@ class DeepInfra {
             let fullResponse = '';
             let buffer = '';
             let usageData = null; // for streaming mode
+            let streamId = null;
+            let streamCreated = null;
+            let streamModel = null;
 
             const req = https.request(options, res => {
                 // Handle authentication errors (401, 403, etc.)
@@ -265,6 +268,11 @@ class DeepInfra {
                         try {
                             const parsed = JSON.parse(line);
 
+                            // Capture stream metadata from first chunk
+                            if (!streamId && parsed.id) streamId = parsed.id;
+                            if (!streamCreated && parsed.created) streamCreated = parsed.created;
+                            if (!streamModel && parsed.model) streamModel = parsed.model;
+
                             // Capture usage if present (usually final chunk)
                             if (parsed.usage) {
                                 usageData = parsed.usage;
@@ -302,7 +310,10 @@ class DeepInfra {
                         full_text: fullResponse,
                         metadata: {
                             streamed: true,
-                            usage: usageData
+                            usage: usageData,
+                            id: streamId,
+                            created: streamCreated,
+                            model: streamModel
                         }
                     });
                 });
