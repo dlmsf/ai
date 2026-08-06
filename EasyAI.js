@@ -17,106 +17,159 @@ import DeepSeek from './core/DeepSeek.js'
 import NewChatPrompt from "./core/util/NewChatPrompt.js";
 import consumeChatRoute from "./core/useful/consumeChatRoute.js";
 
+/**
+ * Creates a streaming callback wrapper that accumulates the full text from individual stream tokens.
+ * This solves the problem where some providers return a truncated full_text in the final streaming result.
+ * 
+ * @param {Function} originalCallback - The original token callback function
+ * @returns {Object} - { wrappedCallback, getAccumulatedText }
+ */
+function createStreamAccumulator(originalCallback) {
+    let accumulatedText = '';
+    
+    const wrappedCallback = (token) => {
+        if (token && token.stream && typeof token.stream.content === 'string') {
+            accumulatedText += token.stream.content;
+        } else if (token && typeof token.content === 'string') {
+            accumulatedText += token.content;
+        } else if (token && token.choices && token.choices[0] && token.choices[0].delta && token.choices[0].delta.content) {
+            accumulatedText += token.choices[0].delta.content;
+        }
+        
+        if (typeof originalCallback === 'function') {
+            originalCallback(token);
+        }
+    };
+    
+    return {
+        wrappedCallback,
+        getAccumulatedText: () => accumulatedText,
+        hasText: () => accumulatedText.length > 0
+    };
+}
 
+/**
+ * Generates a default error response with optional streaming tokens
+ */
+function generateDefaultErrorResponse(config, tokenCallback) {
+    const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
+    const fullText = "Sorry, I'm unable to respond at the moment.";
+    
+    if (config.stream === true && typeof tokenCallback === 'function') {
+        return new Promise((resolve) => {
+            let i = 0;
+            (function next() {
+                if (i < tokens.length) {
+                    tokenCallback({stream: {content: tokens[i]}});
+                    i++;
+                    setTimeout(next, 45);
+                } else {
+                    resolve({ full_text: fullText });
+                }
+            })();
+        });
+    }
+    
+    return { full_text: fullText };
+}
 
 class EasyAI {
     /**
- * @param {Object} config
- * @param {boolean} [config.Llamacpp_InstancesRawLog=false]
- * @param {number} [config.GenerateTimeout=60000]
- * @param {number} [config.LlamaCPP_InstancesLimit=100]
- * @param {string} [config.ScaleMode='Process']
- * @param {number} [config.SleepTolerance=300000]
- * @param {string} [config.openai_token='']
- * @param {string} [config.openai_model]
- * @param {string} [config.deepinfra_token='']
- * @param {string} [config.deepinfra_model]
- * @param {string} [config.deepseek_token='']
- * @param {string} [config.deepseek_model]
- * @param {string} [config.server_url='']
- * @param {number} [config.server_port=4000]
- * @param {string} [config.server_token='']
- * @param {Object} [config.llama]
- * @param {boolean} [config.llama.jbuild=false]
- * @param {boolean} [config.llama.vulkan=false]
- * @param {boolean} [config.llama.cmake=false]
- * @param {number} [config.llama.server_port]
- * @param {string} [config.llama.git_hash]
- * @param {string} [config.llama.llama_model='']
- * @param {boolean} [config.llama.cuda=false]
- * @param {number} [config.llama.gpu_layers]
- * @param {number} [config.llama.threads]
- * @param {string} [config.llama.lora]
- * @param {string} [config.llama.lorabase]
- * @param {number} [config.llama.context]
- * @param {number} [config.llama.slots]
- * @param {boolean} [config.llama.mlock]
- * @param {boolean} [config.llama.mmap]
- */
-constructor(config = {}) {
-    const defaults = {
-        Llamacpp_InstancesRawLog: false,
-        GenerateTimeout: 60000,
-        LlamaCPP_InstancesLimit: 100,
-        ScaleMode: 'Process',
-        SleepTolerance: 200000,
-        openai_token: '',
-        openai_model: undefined,
-        deepinfra_token : '',
-        deepinfra_model : undefined,
-        deepseek_token : '',
-        deepseek_model : undefined,
-        server_url: '',
-        server_port: 4000,
-        server_token: '',
-        llama: {
-            jbuild: false,
-            vulkan: false,
-            cmake: false,
-            server_port: undefined,
-            git_hash: undefined,
-            llama_model: '',
-            cuda: false,
-            gpu_layers: undefined,
-            threads: undefined,
-            lora: undefined,
-            lorabase: undefined,
-            context: undefined,
-            slots: undefined,
-            mlock: undefined,
-            mmap: undefined
-        }
-    };
-
-    this.Made = false
-    this.Checker = {
-        Runnage : setInterval(() => {
-            if(!this.Made){
-                let quant = 0
-                this.LlamaCPP.Instances.forEach(e => {
-                    if(e.ServerOn && quant < 1){
-                        quant++
-                        console.log('reiniciando')
-                        this.Made = true
-                        this.Checker.Runnage = null
-                        this.LlamaCPP.Instances = []
-                        this.LlamaCPP.NewInstance()
-                    }
-                })
-                
+     * @param {Object} config
+     * @param {boolean} [config.Llamacpp_InstancesRawLog=false]
+     * @param {number} [config.GenerateTimeout=60000]
+     * @param {number} [config.LlamaCPP_InstancesLimit=100]
+     * @param {string} [config.ScaleMode='Process']
+     * @param {number} [config.SleepTolerance=300000]
+     * @param {string} [config.openai_token='']
+     * @param {string} [config.openai_model]
+     * @param {string} [config.deepinfra_token='']
+     * @param {string} [config.deepinfra_model]
+     * @param {string} [config.deepseek_token='']
+     * @param {string} [config.deepseek_model]
+     * @param {string} [config.server_url='']
+     * @param {number} [config.server_port=4000]
+     * @param {string} [config.server_token='']
+     * @param {Object} [config.llama]
+     * @param {boolean} [config.llama.jbuild=false]
+     * @param {boolean} [config.llama.vulkan=false]
+     * @param {boolean} [config.llama.cmake=false]
+     * @param {number} [config.llama.server_port]
+     * @param {string} [config.llama.git_hash]
+     * @param {string} [config.llama.llama_model='']
+     * @param {boolean} [config.llama.cuda=false]
+     * @param {number} [config.llama.gpu_layers]
+     * @param {number} [config.llama.threads]
+     * @param {string} [config.llama.lora]
+     * @param {string} [config.llama.lorabase]
+     * @param {number} [config.llama.context]
+     * @param {number} [config.llama.slots]
+     * @param {boolean} [config.llama.mlock]
+     * @param {boolean} [config.llama.mmap]
+     */
+    constructor(config = {}) {
+        const defaults = {
+            Llamacpp_InstancesRawLog: false,
+            GenerateTimeout: 60000,
+            LlamaCPP_InstancesLimit: 100,
+            ScaleMode: 'Process',
+            SleepTolerance: 200000,
+            openai_token: '',
+            openai_model: undefined,
+            deepinfra_token : '',
+            deepinfra_model : undefined,
+            deepseek_token : '',
+            deepseek_model : undefined,
+            server_url: '',
+            server_port: 4000,
+            server_token: '',
+            llama: {
+                jbuild: false,
+                vulkan: false,
+                cmake: false,
+                server_port: undefined,
+                git_hash: undefined,
+                llama_model: '',
+                cuda: false,
+                gpu_layers: undefined,
+                threads: undefined,
+                lora: undefined,
+                lorabase: undefined,
+                context: undefined,
+                slots: undefined,
+                mlock: undefined,
+                mmap: undefined
             }
-        },500)
-    }
-    
-    this.Config = {
-        ...defaults,
-        ...config,
-        llama: {
-            ...defaults.llama,
-            ...(config.llama || {})
+        };
+
+        this.Made = false
+        this.Checker = {
+            Runnage : setInterval(() => {
+                if(!this.Made){
+                    let quant = 0
+                    this.LlamaCPP.Instances.forEach(e => {
+                        if(e.ServerOn && quant < 1){
+                            quant++
+                            this.Made = true
+                            this.Checker.Runnage = null
+                            this.LlamaCPP.Instances = []
+                            this.LlamaCPP.NewInstance()
+                        }
+                    })
+                    
+                }
+            },500)
         }
-    };
-        //this.Config.SleepTolerance = 20000
+        
+        this.Config = {
+            ...defaults,
+            ...config,
+            llama: {
+                ...defaults.llama,
+                ...(config.llama || {})
+            }
+        };
+        
         if(ConfigManager.getKey('start-llamacpp-instanceslog')){this.Config.Llamacpp_InstancesRawLog = true}
 
         this.ChatModule = new ChatModule()
@@ -302,218 +355,85 @@ constructor(config = {}) {
 
         if(!this.ServerURL && !this.OpenAI && !this.DeepInfra && !this.DeepSeek){
             this.LlamaCPP.NewInstance()
-            
         }
+    }
 
-       
+    async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra : false,deepseek : false,logerror : false, stream: true, retryLimit: 420000,tokenCallback : () => {}}) {
+
+        const isStreaming = typeof config.tokenCallback === 'function' && isNonEmptyFunction(config.tokenCallback);
+        config.stream = isStreaming;
+
+        let streamAccumulator = null;
+        let originalCallback = config.tokenCallback;
         
-        // de forma geral criar id unico e ID UNICO em escala plugavel
-
-
-        //utilziar isso abaixo e criar na mesma levada do LogMaster, quem sabe dentro, uma para visualizar em escala varias instancias, HUD onde seja possivel visualizar grupos de 10mi-20mi instancias com facilidade (simulador para testar o hud antes de produçãi )
-        /*
-        this.Info = {
-            Type :  'Native',
-            Status : 'Starting',
-            Engine : ''
+        if (isStreaming) {
+            streamAccumulator = createStreamAccumulator(originalCallback);
+            config.tokenCallback = streamAccumulator.wrappedCallback;
         }
-        */
 
-/*
-        LogMaster.Log('EasyAI Instance',{
-            ...(this.LlamaCPP && {
-                Event : 'Start',
-                Engine : 'LlamaCPP',
-                Threads : this.LlamaCPP.Threads,
-                Model : `${FileTool.fileName(this.LlamaCPP.ModelPath)} | ${FileTool.fileSize(this.LlamaCPP.ModelPath,{includeUnit : true})}`
-            }),
-            ...(this.ServerURL && {
-                ServerConnection : `${this.ServerURL}:${this.ServerPORT}`
-            }),
-            ...(this.OpenAI && {
-                OpenAI_Connection : true
-            }),
-            
-        })
-*/        
-
-    }
-
-async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra : false,deepseek : false,logerror : false, stream: true, retryLimit: 420000,tokenCallback : () => {}}) {
-
-    if (typeof config.tokenCallback === 'function' && isNonEmptyFunction(config.tokenCallback)) {
-        config.stream = true;
-    } else {
-        config.stream = false;
-    }
+        const fixTruncatedFullText = (result) => {
+            if (result && typeof result === 'object' && streamAccumulator && streamAccumulator.hasText()) {
+                const accumulatedText = streamAccumulator.getAccumulatedText();
+                if (!result.full_text || accumulatedText.length > result.full_text.length) {
+                    result.full_text = accumulatedText;
+                }
+            }
+            return result;
+        };
 
         if(this.ServerURL || this.OpenAI || this.DeepInfra || this.DeepSeek){
 
             if(this.ServerURL){
                 if((config.openai && this.OpenAI) || (config.deepinfra && this.DeepInfra) || (config.deepseek && this.DeepSeek)){
-                    if(config.openai && this.OpenAI){
-                        delete config.openai
-                        return await this.OpenAI.Generate(prompt,config)
-                        .catch(e =>{
-                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
+                    let result;
+                    try {
+                        if(config.openai && this.OpenAI) {
+                            delete config.openai;
+                            result = await this.OpenAI.Generate(prompt, config);
+                        } else if(config.deepinfra && this.DeepInfra) {
+                            delete config.deepinfra;
+                            result = await this.DeepInfra.Generate(prompt, config);
+                        } else if(config.deepseek && this.DeepSeek) {
+                            delete config.deepseek;
+                            result = await this.DeepSeek.Generate(prompt, config);
                         }
-
-                        })
-                    } else if(config.deepinfra && this.DeepInfra) {
-                        return await this.DeepInfra.Generate(prompt,config)
-                        .catch(e =>{
-                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
-                        }
-
-                        })
-                    } else if(config.deepseek && this.DeepSeek) {
-                        return await this.DeepSeek.Generate(prompt,config)
-                        .catch(e =>{
-                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
-                        }
-
-                        })
+                        return fixTruncatedFullText(result);
+                    } catch(e) {
+                        return await generateDefaultErrorResponse(config, originalCallback);
                     }
-                    
                 } else {
-                    let consume_result = await consumeGenerateRoute({serverUrl : this.ServerURL,port : this.ServerPORT,prompt : prompt,token : this.ServerTOKEN,config : config,onData : config.tokenCallback})
-                    if(consume_result.error && (consume_result.error == 'server offline' || consume_result.error == 'Invalid token.')){
-                        const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
+                    let consume_result = await consumeGenerateRoute({
+                        serverUrl : this.ServerURL,
+                        port : this.ServerPORT,
+                        prompt : prompt,
+                        token : this.ServerTOKEN,
+                        config : config,
+                        onData : config.tokenCallback
+                    });
                     
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
-                        }
+                    consume_result = fixTruncatedFullText(consume_result);
+                    
+                    if(consume_result.error && (consume_result.error == 'server offline' || consume_result.error == 'Invalid token.')){
+                        return await generateDefaultErrorResponse(config, originalCallback);
                     }
 
-                    return consume_result
+                    return consume_result;
                 }
                 
-            } else if(this.OpenAI || this.DeepInfra || this.DeepSeek){
-                    if(this.OpenAI && !config.deepinfra && !config.deepseek){
-                        return await this.OpenAI.Generate(prompt,config)
-                        .catch(e =>{
-                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
-                        }
-
-                        })
-                    } else if(this.DeepInfra && !config.deepseek){
-                        return await this.DeepInfra.Generate(prompt,config)
-                        .catch(e =>{
-                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
-                        }
-
-                        })
-                    } else if(this.DeepSeek){
-                        return await this.DeepSeek.Generate(prompt,config)
-                        .catch(e =>{
-                            const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
-                        }
-
-                        })
+            } else {
+                let result;
+                try {
+                    if(this.OpenAI && !config.deepinfra && !config.deepseek) {
+                        result = await this.OpenAI.Generate(prompt, config);
+                    } else if(this.DeepInfra && !config.deepseek) {
+                        result = await this.DeepInfra.Generate(prompt, config);
+                    } else if(this.DeepSeek) {
+                        result = await this.DeepSeek.Generate(prompt, config);
                     }
-               
+                    return fixTruncatedFullText(result);
+                } catch(e) {
+                    return await generateDefaultErrorResponse(config, originalCallback);
+                }
             }
 
         } else {
@@ -524,119 +444,139 @@ async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra :
                 result = await this.LlamaCPP.Instances[index].Generate(prompt, config, config.tokenCallback);
                 if (result !== false) {
                     result = renameProperty(result,'content','full_text')
-                    
                 }
             } else {
                 let serveron_index = await this.WaitServerOn(index)
                 if(serveron_index != -1){
-                        result = await this.LlamaCPP.Instances[serveron_index].Generate(prompt, config, config.tokenCallback);
-                        if (result !== false) {
-                            result = renameProperty(result,'content','full_text')
-                         }
-                   
-                    } else {
-                       
-                        const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve('');
-                                    }
-                                })();
-                            });
-                        }
-
+                    result = await this.LlamaCPP.Instances[serveron_index].Generate(prompt, config, config.tokenCallback);
+                    if (result !== false) {
+                        result = renameProperty(result,'content','full_text')
                     }
-                     
+                } else {
+                    if(isStreaming){ 
+                        return await generateDefaultErrorResponse(config, originalCallback);
                     }
-            
-            return result
-
-         
-
-        }
-
-    }
-
-    // In EasyAI.js - Chat method, add validation
-async Chat(messages = [], config = {}) {
-    // Clean and validate messages before sending
-    const cleanMessages = messages
-        .filter(msg => msg && msg.role && msg.content)
-        .map(msg => ({
-            role: msg.role,
-            content: typeof msg.content === 'string' 
-                ? msg.content 
-                : String(msg.content)  // Convert to string if it's not
-        }))
-        .filter(msg => {
-            // Filter out messages that look like JSON streaming data
-            const isJsonStream = msg.content.includes('"full_text"') || 
-                                msg.content.includes('"stream"') ||
-                                msg.content.includes('"token"')
-            if (isJsonStream) {
-                console.warn('Filtered out JSON stream data from message')
-                return false
-            }
-            return true
-        })
-    
-    // Limit to last 20 messages to prevent explosion
-    const limitedMessages = cleanMessages.slice(-20)
-    
-    if(this.ServerURL){
-    let consume_result = await consumeChatRoute({serverUrl : this.ServerURL,port : this.ServerPORT,messages : limitedMessages,token : this.ServerTOKEN,config : config,onData : config.tokenCallback})
-                    if(consume_result.error && (consume_result.error == 'server offline' || consume_result.error == 'Invalid token.')){
-                        const tokens = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
-                        consume_result.full_text = "Sorry, I'm unable to respond at the moment.";
-                    
-                        if(config.stream == true){ 
-                            return new Promise((resolve) => {
-                                let i = 0;
-                                (function next() {
-                                    if (i < tokens.length) {
-                                        config.tokenCallback({stream: {content: tokens[i]}});
-                                        i++;
-                                        setTimeout(next, 45);
-                                    } else {
-                                        resolve(consume_result); // testar trocando por '' dps
-                                    }
-                                })();
-                            });
-                        }
-                    }
-
-                    return consume_result
+                    result = { full_text: "Sorry, I'm unable to respond at the moment." };
                 }
-
-    // Handle OpenAI
-    if ((config.openai || this.OpenAI) && !config.deepinfra && !config.deepseek && !config.openai_avoidchat) {
-        delete config.openai;
-        return await this.OpenAI.Chat(limitedMessages, config);
+            }
+            
+            result = fixTruncatedFullText(result);
+            
+            return result;
+        }
     }
 
-    // Handle DeepInfra
-    if ((config.deepinfra || this.DeepInfra) && !config.deepseek && !config.deepinfra_avoidchat) {
-        delete config.deepinfra;
-        return await this.DeepInfra.Chat(limitedMessages, config);
-    }
-    
-    // Handle DeepSeek
-    if ((config.deepseek || this.DeepSeek) && !config.deepseek_avoidchat) {
-        delete config.deepseek;
-        return await this.DeepSeek.Chat(limitedMessages, config);
-    }
-    
-    // Handle DeepInfra (legacy - convert to prompt-based)
-    if (this.DeepInfra) {
+    async Chat(messages = [], config = {}) {
+        const cleanMessages = messages
+            .filter(msg => msg && msg.role && msg.content)
+            .map(msg => ({
+                role: msg.role,
+                content: typeof msg.content === 'string' 
+                    ? msg.content 
+                    : String(msg.content)
+            }))
+            .filter(msg => {
+                const isJsonStream = msg.content.includes('"full_text"') || 
+                                    msg.content.includes('"stream"') ||
+                                    msg.content.includes('"token"')
+                if (isJsonStream) {
+                    console.warn('Filtered out JSON stream data from message')
+                    return false
+                }
+                return true
+            })
+        
+        const limitedMessages = cleanMessages.slice(-20)
+        
+        const isStreaming = typeof config.tokenCallback === 'function' && isNonEmptyFunction(config.tokenCallback);
+        config.stream = isStreaming;
+        
+        let streamAccumulator = null;
+        let originalCallback = config.tokenCallback;
+        
+        if (isStreaming) {
+            streamAccumulator = createStreamAccumulator(originalCallback);
+            config.tokenCallback = streamAccumulator.wrappedCallback;
+        }
+        
+        const fixTruncatedFullText = (result) => {
+            if (result && typeof result === 'object' && streamAccumulator && streamAccumulator.hasText()) {
+                const accumulatedText = streamAccumulator.getAccumulatedText();
+                if (!result.full_text || accumulatedText.length > result.full_text.length) {
+                    result.full_text = accumulatedText;
+                }
+            }
+            return result;
+        };
+        
+        if(this.ServerURL){
+            let consume_result = await consumeChatRoute({
+                serverUrl : this.ServerURL,
+                port : this.ServerPORT,
+                messages : limitedMessages,
+                token : this.ServerTOKEN,
+                config : config,
+                onData : config.tokenCallback
+            });
+            
+            consume_result = fixTruncatedFullText(consume_result);
+            
+            if(consume_result.error && (consume_result.error == 'server offline' || consume_result.error == 'Invalid token.')){
+                if(isStreaming){ 
+                    return await generateDefaultErrorResponse(config, originalCallback);
+                }
+                return { error: consume_result.error };
+            }
+
+            return consume_result;
+        }
+
+        if ((config.openai || this.OpenAI) && !config.deepinfra && !config.deepseek && !config.openai_avoidchat) {
+            delete config.openai;
+            let result = await this.OpenAI.Chat(limitedMessages, config);
+            return fixTruncatedFullText(result);
+        }
+
+        if ((config.deepinfra || this.DeepInfra) && !config.deepseek && !config.deepinfra_avoidchat) {
+            delete config.deepinfra;
+            let result = await this.DeepInfra.Chat(limitedMessages, config);
+            return fixTruncatedFullText(result);
+        }
+        
+        if ((config.deepseek || this.DeepSeek) && !config.deepseek_avoidchat) {
+            delete config.deepseek;
+            let result = await this.DeepSeek.Chat(limitedMessages, config);
+            return fixTruncatedFullText(result);
+        }
+        
+        if (this.DeepInfra) {
+            let systemMessage = config.systemMessage;
+            if (!systemMessage && config.systemType) {
+                systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
+            }
+            
+            const final_prompt = NewChatPrompt.build(limitedMessages, systemMessage);
+            
+            return await this.Generate(final_prompt, {
+                ...config,
+                stop: ['<|im_end|>']
+            });
+        }
+        
+        if (this.DeepSeek) {
+            let systemMessage = config.systemMessage;
+            if (!systemMessage && config.systemType) {
+                systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
+            }
+            
+            const final_prompt = NewChatPrompt.build(limitedMessages, systemMessage);
+            
+            return await this.Generate(final_prompt, {
+                ...config,
+                stop: ['<|im_end|>']
+            });
+        }
+        
         let systemMessage = config.systemMessage;
         if (!systemMessage && config.systemType) {
             systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
@@ -649,49 +589,18 @@ async Chat(messages = [], config = {}) {
             stop: ['<|im_end|>']
         });
     }
-    
-    // Handle DeepSeek (legacy - convert to prompt-based)
-    if (this.DeepSeek) {
-        let systemMessage = config.systemMessage;
-        if (!systemMessage && config.systemType) {
-            systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
-        }
-        
-        const final_prompt = NewChatPrompt.build(limitedMessages, systemMessage);
-        
-        return await this.Generate(final_prompt, {
-            ...config,
-            stop: ['<|im_end|>']
-        });
+
+    async PrintGenerate(prompt){
+        console.log((await this.Generate(prompt)).full_text)
+    }    
+
+    static Sleep = async (ms) => {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
-    
-    // For local LlamaCPP
-    let systemMessage = config.systemMessage;
-    if (!systemMessage && config.systemType) {
-        systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
-    }
-    
-    const final_prompt = NewChatPrompt.build(limitedMessages, systemMessage);
-    
-    return await this.Generate(final_prompt, {
-        ...config,
-        stop: ['<|im_end|>']
-    });
+
+    static Server = EasyAI_Server
+
+    static WebGPT = EasyAI_WebGPT
 }
 
-async PrintGenerate(prompt){
-    console.log((await this.Generate(prompt)).full_text)
-}    
-
-static Sleep = async (ms) => {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-static Server = EasyAI_Server
-
-static WebGPT = EasyAI_WebGPT
-
-
-}
-
-export default EasyAI
+export default EasyAI;

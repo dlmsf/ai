@@ -1,157 +1,11 @@
 import http from 'http';
 import https from 'https';
 
-/**
- * Utility function to consume the /chat route of EasyAI Server
- * @param {Object} params - Function parameters
- * @param {string} params.serverUrl - Server URL or IP address
- * @param {number} params.port - Server port
- * @param {Array} params.messages - Array of chat messages
- * @param {string} params.token - Authentication token (optional)
- * @param {Object} params.config - Configuration object (optional)
- * @param {Function} params.onData - Callback for streaming data (optional)
- * @returns {Promise<Object>} - Promise resolving to the response data with stream log
- */
-
-// Default error message tokens for streaming
 const DEFAULT_ERROR_TOKENS = ["Sorry", ", ", "I'm ", "unable ", "to ", "respond ", "at ", "the ", "moment."];
 const DEFAULT_ERROR_TEXT = "Sorry, I'm unable to respond at the moment.";
 
-// verificação se é um IP
 function isIpAddress(serverUrl) {
   return /^\d{1,3}(\.\d{1,3}){3}$/.test(serverUrl);
-}
-
-function consumeChatRoute({
-  serverUrl,
-  port,
-  messages,
-  token = '',
-  config = {},
-  onData = () => {}
-}) {
-  return new Promise(async (resolve) => {
-    const maxRetryTime = 30000;
-    const retryDelay = 500;
-    const startTime = Date.now();
-    
-    let lastError = null;
-    let activeRequest = null;
-    let consecutiveTimeouts = 0;
-    
-    // Array to store all streamed tokens
-    const streamLog = [];
-    
-    // Wrapper for onData to also capture in streamLog
-    const wrappedOnData = (data) => {
-      // Call the original onData
-      onData(data);
-      // Capture in streamLog
-      streamLog.push(data);
-    };
-    
-    const cleanup = () => {
-      activeRequest = null;
-    };
-    
-    // Check if streaming is enabled
-    const isStreaming = config.stream === true && typeof onData === 'function';
-    
-    while (Date.now() - startTime < maxRetryTime) {
-      try {
-        activeRequest = attemptRequest({
-          serverUrl,
-          port,
-          messages,
-          token,
-          config,
-          onData: wrappedOnData
-        });
-        
-        const result = await activeRequest;
-        cleanup();
-        
-        // Handle both object and string results
-        let finalResult = result;
-        
-        // If result is a string, convert it to an object with full_text property
-        if (typeof result === 'string') {
-          finalResult = { full_text: result };
-        }
-        
-        // Add streamLog to the result (only if it's an object)
-        if (isStreaming && typeof finalResult === 'object' && finalResult !== null) {
-          finalResult.streamLog = streamLog;
-        }
-        
-        resolve(finalResult);
-        return;
-        
-      } catch (error) {
-        cleanup();
-        lastError = error;
-        
-        // Check if this is an error response from the server (like 403 token error)
-        // If it has a specific error message, pass it through directly
-        if (error.responseBody) {
-          resolve(error.responseBody);
-          return;
-        }
-        
-        if (error.message?.includes('timeout') || error.code === 'ETIMEDOUT') {
-          consecutiveTimeouts++;
-        } else {
-          consecutiveTimeouts = 0;
-        }
-        
-        if (!isConnectionError(error)) {
-          break;
-        }
-        
-        if (Date.now() - startTime < maxRetryTime - retryDelay) {
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
-        }
-      }
-    }
-    
-    // Handle error case
-    if (isStreaming) {
-      await streamDefaultErrorMessage(wrappedOnData, config);
-      
-      resolve({ 
-        error: lastError?.message || "server offline",
-        full_text: DEFAULT_ERROR_TEXT,
-        streamLog: streamLog
-      });
-    } else {
-      resolve({ 
-        error: lastError?.message || "server offline" 
-      });
-    }
-  });
-}
-
-// Helper function to stream default error message
-async function streamDefaultErrorMessage(onData, config) {
-  return new Promise((resolve) => {
-    let i = 0;
-    
-    function streamNext() {
-      if (i < DEFAULT_ERROR_TOKENS.length) {
-        onData({
-          stream: {
-            content: DEFAULT_ERROR_TOKENS[i]
-          }
-        });
-        i++;
-        setTimeout(streamNext, 45);
-      } else {
-        resolve();
-      }
-    }
-    
-    streamNext();
-  });
 }
 
 function isConnectionError(error) {
@@ -168,6 +22,26 @@ function isConnectionError(error) {
          error.message?.includes('network') ||
          error.message?.includes('ECONNREFUSED') ||
          error.message?.includes('ETIMEDOUT');
+}
+
+async function streamDefaultErrorMessage(onData) {
+  return new Promise((resolve) => {
+    let i = 0;
+    function streamNext() {
+      if (i < DEFAULT_ERROR_TOKENS.length) {
+        onData({
+          stream: {
+            content: DEFAULT_ERROR_TOKENS[i]
+          }
+        });
+        i++;
+        setTimeout(streamNext, 45);
+      } else {
+        resolve();
+      }
+    }
+    streamNext();
+  });
 }
 
 function attemptRequest({
@@ -197,15 +71,11 @@ function attemptRequest({
       port = 443;
     }
 
-    const finalConfig = config;
-
     const requestData = {
       messages,
-      config: finalConfig
+      config: config
     };
     
-    // Only include token in body for backward compatibility
-    // The token will also be sent in Authorization header
     if (token) {
       requestData.token = token;
     }
@@ -224,58 +94,51 @@ function attemptRequest({
       timeout: 10000
     };
     
-    // Add Bearer token to Authorization header if token is provided
     if (token) {
       options.headers['Authorization'] = `Bearer ${token}`;
     }
 
     const req = protocol.request(options, (res) => {
-      let finalData = '';
       let hasResolved = false;
 
       res.on('data', (chunk) => {
         const chunkData = chunk.toString();
-        finalData += chunkData;
+        const lines = chunkData.split('\n').filter(line => line.trim());
         
-        try {
-          const parsedChunk = JSON.parse(chunkData);
-          
-          if (parsedChunk.stream && config.stream) {
-            // This is a streaming token - pass it to onData
-            onData(parsedChunk);
-          } else if (!config.stream || parsedChunk.generation_settings) {
-            // This is the final result (non-streaming or metadata)
-            if (!hasResolved) {
-              hasResolved = true;
-              resolve(parsedChunk);
+        for (const line of lines) {
+          try {
+            const parsedChunk = JSON.parse(line);
+            
+            if (parsedChunk.stream && parsedChunk.stream.content && config.stream) {
+              onData(parsedChunk);
+            } else if (!parsedChunk.stream && (parsedChunk.full_text !== undefined || parsedChunk.error !== undefined)) {
+              if (!hasResolved) {
+                hasResolved = true;
+                resolve(parsedChunk);
+                return;
+              }
+            } else if (parsedChunk.generation_settings) {
+              if (!hasResolved) {
+                hasResolved = true;
+                resolve(parsedChunk);
+                return;
+              }
             }
+          } catch (error) {
+            // Not valid JSON line, continue
           }
-        } catch (error) {
-          // If it's not JSON and streaming is enabled, might be raw content
-          // Continue collecting data
         }
       });
 
       res.on('end', () => {
         if (!hasResolved) {
-          try {
-            const parsedData = JSON.parse(finalData);
-            
-            // Check if this is an error response (like 403 with error field)
-            // Pass it through exactly as received from the server
-            if (res.statusCode >= 400 && parsedData.error) {
-              const error = new Error(parsedData.error);
-              error.responseBody = parsedData;
-              error.statusCode = res.statusCode;
-              reject(error);
-            } else {
-              resolve(parsedData);
-            }
-          } catch (error) {
-            // If it's not JSON, return as string
-            resolve(finalData);
-          }
+          const error = new Error('No valid response received from server');
+          reject(error);
         }
+      });
+
+      res.on('error', (error) => {
+        reject(error);
       });
     });
 
@@ -290,6 +153,95 @@ function attemptRequest({
 
     req.write(postData);
     req.end();
+  });
+}
+
+function consumeChatRoute({
+  serverUrl,
+  port,
+  messages,
+  token = '',
+  config = {},
+  onData = () => {}
+}) {
+  return new Promise(async (resolve) => {
+    const maxRetryTime = 30000;
+    const retryDelay = 500;
+    const startTime = Date.now();
+    
+    let lastError = null;
+    let activeRequest = null;
+    
+    const streamLog = [];
+    
+    const wrappedOnData = (data) => {
+      onData(data);
+      streamLog.push(data);
+    };
+    
+    const cleanup = () => {
+      activeRequest = null;
+    };
+    
+    const isStreaming = config.stream === true && typeof onData === 'function';
+    
+    while (Date.now() - startTime < maxRetryTime) {
+      try {
+        activeRequest = attemptRequest({
+          serverUrl,
+          port,
+          messages,
+          token,
+          config,
+          onData: wrappedOnData
+        });
+        
+        const result = await activeRequest;
+        cleanup();
+        
+        let finalResult = result;
+        if (typeof result === 'string') {
+          finalResult = { full_text: result };
+        }
+        
+        if (isStreaming && typeof finalResult === 'object' && finalResult !== null) {
+          finalResult.streamLog = streamLog;
+        }
+        
+        resolve(finalResult);
+        return;
+        
+      } catch (error) {
+        cleanup();
+        lastError = error;
+        
+        if (error.responseBody) {
+          resolve(error.responseBody);
+          return;
+        }
+        
+        if (!isConnectionError(error)) {
+          break;
+        }
+        
+        if (Date.now() - startTime < maxRetryTime - retryDelay) {
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
+        }
+      }
+    }
+    
+    if (isStreaming) {
+      await streamDefaultErrorMessage(wrappedOnData);
+      resolve({ 
+        error: lastError?.message || "server offline",
+        full_text: DEFAULT_ERROR_TEXT,
+        streamLog: streamLog
+      });
+    } else {
+      resolve({ 
+        error: lastError?.message || "server offline" 
+      });
+    }
   });
 }
 

@@ -69,7 +69,6 @@ class EasyAI_Server {
      * @param {EasyAI_ServerConfig} config - Server and EasyAI configuration
      */
     constructor(config = {}) {
-        // Extract server-specific properties
         const { 
             port = 4000, 
             token = '', 
@@ -81,11 +80,9 @@ class EasyAI_Server {
         this.port = port;
         this.handle_port = handle_port;
         
-        // Use Maps for O(1) lookups and better concurrency
-        this.tokenMap = new Map(); // token-value -> token-id for fast validation
-        this.tokenStore = new Map(); // token-id -> token-object
+        this.tokenMap = new Map();
+        this.tokenStore = new Map();
         
-        // Handle token initialization (supports string or array)
         if (Array.isArray(token)) {
             token.forEach(t => {
                 if (t && typeof t === 'string' && t.trim() !== '') {
@@ -98,8 +95,6 @@ class EasyAI_Server {
         
         this.serverConfig = server;
         
-        // Create EasyAI instance with remaining config
-        // If EasyAI_Config exists (backward compatibility), merge it
         if (config.EasyAI_Config) {
             Object.assign(easyAIConfig, config.EasyAI_Config);
         }
@@ -111,26 +106,17 @@ class EasyAI_Server {
         this.server = http.createServer((req, res) => this.handleRequest(req, res));
     }
 
-    /**
-     * Validate token against configured tokens
-     * @param {string} tokenToValidate - Token to validate
-     * @returns {boolean} - True if token is valid
-     */
     isValidToken(tokenToValidate) {
-        // If no tokens are configured, accept any request (with or without token)
         if (this.tokenMap.size === 0) {
             return true;
         }
         
-        // If token is required but none provided, reject
         if (!tokenToValidate) {
             return false;
         }
         
-        // Check if token exists in map
         const tokenId = this.tokenMap.get(tokenToValidate);
         if (tokenId) {
-            // Update last used timestamp asynchronously
             const token = this.tokenStore.get(tokenId);
             if (token) {
                 token.lastUsed = new Date().toISOString();
@@ -141,14 +127,7 @@ class EasyAI_Server {
         return false;
     }
 
-    /**
-     * Extract token from request (Bearer header or body)
-     * @param {http.IncomingMessage} req - HTTP request
-     * @param {Object} body - Parsed request body
-     * @returns {string|null} - Extracted token or null
-     */
     extractToken(req, body) {
-        // Check Authorization header first (Bearer token)
         const authHeader = req.headers.authorization;
         if (authHeader && authHeader.startsWith('Bearer ')) {
             const bearerToken = authHeader.substring(7);
@@ -157,7 +136,6 @@ class EasyAI_Server {
             }
         }
         
-        // Fallback to body token (backward compatibility)
         if (body && body.token && typeof body.token === 'string' && body.token.trim() !== '') {
             return body.token;
         }
@@ -179,17 +157,14 @@ class EasyAI_Server {
                 try {
                     const requestData = JSON.parse(body);
                     
-                    // Extract token from header or body
                     const providedToken = this.extractToken(req, requestData);
 
-                    // Validate token
                     if (!this.isValidToken(providedToken)) {
                         res.writeHead(403, { 'Content-Type': 'application/json' });
                         res.end(JSON.stringify({ error: 'Invalid token.' }));
                         return;
                     }
 
-                    // Remove token from requestData if present (for cleaner processing)
                     delete requestData.token;
 
                     if (pathname === '/generate') {
@@ -215,12 +190,14 @@ class EasyAI_Server {
             res.writeHead(200, { 'Content-Type': 'application/json', 'Transfer-Encoding': 'chunked' });
 
             config.tokenCallback = (token) => {
-                res.write(JSON.stringify(token) + '\n');
+                const jsonLine = JSON.stringify(token) + '\n';
+                res.write(jsonLine);
             }
 
             this.AI.Generate(requestData.prompt, config).then(result => {
                 if (result) {
-                    res.write(JSON.stringify(result));
+                    const finalJson = JSON.stringify(result);
+                    res.write(finalJson);
                 }
                 res.end();
             }).catch(error => {
@@ -245,12 +222,14 @@ class EasyAI_Server {
             res.writeHead(200, { 'Content-Type': 'application/json', 'Transfer-Encoding': 'chunked' });
 
             config.tokenCallback = (token) => {
-                res.write(JSON.stringify(token) + '\n');
+                const jsonLine = JSON.stringify(token) + '\n';
+                res.write(jsonLine);
             }
 
             this.AI.Chat(requestData.messages, config).then(result => {
                 if (result) {
-                    res.write(JSON.stringify(result));
+                    const finalJson = JSON.stringify(result);
+                    res.write(finalJson);
                 }
                 res.end();
             }).catch(error => {
@@ -268,7 +247,6 @@ class EasyAI_Server {
         }
     }
 
-    // Token management methods with Map storage
     addToken(token, name = '') {
         const tokenValue = token || this.generateToken();
         const id = this.generateId();
@@ -281,11 +259,10 @@ class EasyAI_Server {
             lastUsed: null
         };
         
-        // Store in both Maps for O(1) access
         this.tokenMap.set(tokenValue, id);
         this.tokenStore.set(id, tokenObject);
         
-        return { ...tokenObject }; // Return copy to prevent external modification
+        return { ...tokenObject };
     }
 
     getTokens() {
@@ -318,7 +295,6 @@ class EasyAI_Server {
     deleteToken(id) {
         const token = this.tokenStore.get(id);
         if (token) {
-            // Remove from both Maps
             this.tokenMap.delete(token.token);
             this.tokenStore.delete(id);
             return true;
@@ -332,7 +308,6 @@ class EasyAI_Server {
             if (updates.name) token.name = updates.name;
             
             if (updates.token && updates.token !== token.token) {
-                // Update tokenMap with new value
                 this.tokenMap.delete(token.token);
                 this.tokenMap.set(updates.token, id);
                 token.token = updates.token;
