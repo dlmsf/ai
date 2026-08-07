@@ -98,7 +98,12 @@ class NovitaAI {
         'deepseek/deepseek-v4-flash-0731',
         'deepseek/deepseek-v4-pro',
         'deepseek/deepseek-v4-flash',
-        'moonshotai/kimi-k3',
+        'meta-llama/llama-3.2-1b-instruct',
+        'meta-llama/llama-3.2-3b-instruct',
+    ];
+
+    /*
+    let rest = [ 'moonshotai/kimi-k3',
         'tencent/hy3',
         'zai-org/glm-5.2',
         'moonshotai/kimi-k2.7-code',
@@ -227,11 +232,10 @@ class NovitaAI {
         'thudm/glm-4-32b-0414',
         'qwen/qwen2.5-7b-instruct',
         'qwen/qwen-2-vl-72b-instruct',
-        'meta-llama/llama-3.2-1b-instruct',
-        'meta-llama/llama-3.2-3b-instruct',
+    
         'sao10k/l31-70b-euryale-v2.2',
-        'qwen/qwen-2-7b-instruct'
-    ];
+        'qwen/qwen-2-7b-instruct']
+    */
 
     static ModelCosts = {
         "moonshotai/kimi-k3": { inputCostPerMillion: 3.00, outputCostPerMillion: 15.00 },
