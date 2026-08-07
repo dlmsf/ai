@@ -5,6 +5,7 @@ import SettingsMenu from "./SettingsMenu.js"
 import LlamaCPP_Menu from "./LlamaCPP_Menu.js"
 import DeepInfra from "../../DeepInfra.js"
 import DeepSeek from "../../DeepSeek.js"
+import NovitaAI from "../../NovitaAI.js"
 
 const TextGeneration_Menu = () => ({
     title : `• Settings / TextGeneration`,
@@ -151,13 +152,51 @@ options : [
                 
                 }
             },
+        {
+            name : (ConfigManager.getKey('novitaai') ? ColorText.green('NovitaAI') : ColorText.red('NovitaAI')),
+            action : async () => {
+                if(ConfigManager.getKey('novitaai')){
+                    let actual = ConfigManager.getKey('novitaai')
+                    let response = await MenuCLI.ask('Edit',{options : [`Token`,`Model (${ColorText.cyan(actual.model)})`,'🗑️ Clear','Cancel']})
+                    switch (response) {
+                        case 'Token':
+                            actual.token = await MenuCLI.ask('NovitaAI Token : ')
+                            ConfigManager.setKey('novitaai',actual)
+                            MenuCLI.displayMenu(TextGeneration_Menu)
+                        break;
+        
+                        case `Model (${ColorText.cyan(actual.model)})`:
+                            actual.model = await MenuCLI.ask('Select the model',{options : NovitaAI.Models})
+                            ConfigManager.setKey('novitaai',actual)
+                            MenuCLI.displayMenu(TextGeneration_Menu)
+                            break;
+        
+                            case `🗑️ Clear`:
+                               ConfigManager.deleteKey('novitaai')
+                                MenuCLI.displayMenu(TextGeneration_Menu)
+                                break;
+                            
+                        default:
+                            MenuCLI.displayMenu(TextGeneration_Menu)
+                        break;
+                    }
+                } else {
+                    let final_object = {}
+                    final_object.token = await MenuCLI.ask('NovitaAI Token : ')
+                    final_object.model = await MenuCLI.ask('Select the model',{options : NovitaAI.Models})
+                    ConfigManager.setKey('novitaai',final_object)
+                    MenuCLI.displayMenu(TextGeneration_Menu)
+                }
+                
+                }
+            },
     {
         name : '← Back',
         action : () => {
             MenuCLI.displayMenu(SettingsMenu)
             }
         }
-    ]
+    ]	
 
 })
 

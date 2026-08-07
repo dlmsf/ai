@@ -14,6 +14,7 @@ import ConfigManager from "./core/ConfigManager.js";
 import {exec} from 'child_process'
 import DeepInfra from './core/DeepInfra.js'
 import DeepSeek from './core/DeepSeek.js'
+import NovitaAI from './core/NovitaAI.js'
 import NewChatPrompt from "./core/util/NewChatPrompt.js";
 import consumeChatRoute from "./core/useful/consumeChatRoute.js";
 
@@ -87,6 +88,8 @@ class EasyAI {
      * @param {string} [config.deepinfra_model]
      * @param {string} [config.deepseek_token='']
      * @param {string} [config.deepseek_model]
+     * @param {string} [config.novitaai_token='']
+     * @param {string} [config.novitaai_model]
      * @param {string} [config.server_url='']
      * @param {number} [config.server_port=4000]
      * @param {string} [config.server_token='']
@@ -120,6 +123,8 @@ class EasyAI {
             deepinfra_model : undefined,
             deepseek_token : '',
             deepseek_model : undefined,
+            novitaai_token : '',
+            novitaai_model : undefined,
             server_url: '',
             server_port: 4000,
             server_token: '',
@@ -176,6 +181,7 @@ class EasyAI {
         this.OpenAI = (config.openai_token) ? new OpenAI(config.openai_token,{model : config.openai_model}) : null
         this.DeepInfra = (config.deepinfra_token) ? new DeepInfra(config.deepinfra_token,{model : config.deepinfra_model,log : config.deepinfra_log}) : null
         this.DeepSeek = (config.deepseek_token) ? new DeepSeek(config.deepseek_token,{model : config.deepseek_model,log : config.deepseek_log}) : null
+        this.NovitaAI = (config.novitaai_token) ? new NovitaAI(config.novitaai_token,{model : config.novitaai_model,log : config.novitaai_log}) : null
 
         this.ServerURL = config.server_url || null
         this.ServerPORT = config.server_port || 4000
@@ -353,12 +359,12 @@ class EasyAI {
             return instanceIndex;
         }
 
-        if(!this.ServerURL && !this.OpenAI && !this.DeepInfra && !this.DeepSeek){
+        if(!this.ServerURL && !this.OpenAI && !this.DeepInfra && !this.DeepSeek && !this.NovitaAI){
             this.LlamaCPP.NewInstance()
         }
     }
 
-    async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra : false,deepseek : false,logerror : false, stream: true, retryLimit: 420000,tokenCallback : () => {}}) {
+    async Generate(prompt = 'Once upon a time', config = {openai : false,deepinfra : false,deepseek : false,novitaai : false,logerror : false, stream: true, retryLimit: 420000,tokenCallback : () => {}}) {
 
         const isStreaming = typeof config.tokenCallback === 'function' && isNonEmptyFunction(config.tokenCallback);
         config.stream = isStreaming;
@@ -381,10 +387,10 @@ class EasyAI {
             return result;
         };
 
-        if(this.ServerURL || this.OpenAI || this.DeepInfra || this.DeepSeek){
+        if(this.ServerURL || this.OpenAI || this.DeepInfra || this.DeepSeek || this.NovitaAI){
 
             if(this.ServerURL){
-                if((config.openai && this.OpenAI) || (config.deepinfra && this.DeepInfra) || (config.deepseek && this.DeepSeek)){
+                if((config.openai && this.OpenAI) || (config.deepinfra && this.DeepInfra) || (config.deepseek && this.DeepSeek) || (config.novitaai && this.NovitaAI)){
                     let result;
                     try {
                         if(config.openai && this.OpenAI) {
@@ -396,6 +402,9 @@ class EasyAI {
                         } else if(config.deepseek && this.DeepSeek) {
                             delete config.deepseek;
                             result = await this.DeepSeek.Generate(prompt, config);
+                        } else if(config.novitaai && this.NovitaAI) {
+                            delete config.novitaai;
+                            result = await this.NovitaAI.Generate(prompt, config);
                         }
                         return fixTruncatedFullText(result);
                     } catch(e) {
@@ -423,12 +432,14 @@ class EasyAI {
             } else {
                 let result;
                 try {
-                    if(this.OpenAI && !config.deepinfra && !config.deepseek) {
+                    if(this.OpenAI && !config.deepinfra && !config.deepseek && !config.novitaai) {
                         result = await this.OpenAI.Generate(prompt, config);
-                    } else if(this.DeepInfra && !config.deepseek) {
+                    } else if(this.DeepInfra && !config.deepseek && !config.novitaai) {
                         result = await this.DeepInfra.Generate(prompt, config);
-                    } else if(this.DeepSeek) {
+                    } else if(this.DeepSeek && !config.novitaai) {
                         result = await this.DeepSeek.Generate(prompt, config);
+                    } else if(this.NovitaAI) {
+                        result = await this.NovitaAI.Generate(prompt, config);
                     }
                     return fixTruncatedFullText(result);
                 } catch(e) {
@@ -531,21 +542,27 @@ class EasyAI {
             return consume_result;
         }
 
-        if ((config.openai || this.OpenAI) && !config.deepinfra && !config.deepseek && !config.openai_avoidchat) {
+        if ((config.openai || this.OpenAI) && !config.deepinfra && !config.deepseek && !config.novitaai && !config.openai_avoidchat) {
             delete config.openai;
             let result = await this.OpenAI.Chat(limitedMessages, config);
             return fixTruncatedFullText(result);
         }
 
-        if ((config.deepinfra || this.DeepInfra) && !config.deepseek && !config.deepinfra_avoidchat) {
+        if ((config.deepinfra || this.DeepInfra) && !config.deepseek && !config.novitaai && !config.deepinfra_avoidchat) {
             delete config.deepinfra;
             let result = await this.DeepInfra.Chat(limitedMessages, config);
             return fixTruncatedFullText(result);
         }
         
-        if ((config.deepseek || this.DeepSeek) && !config.deepseek_avoidchat) {
+        if ((config.deepseek || this.DeepSeek) && !config.novitaai && !config.deepseek_avoidchat) {
             delete config.deepseek;
             let result = await this.DeepSeek.Chat(limitedMessages, config);
+            return fixTruncatedFullText(result);
+        }
+        
+        if ((config.novitaai || this.NovitaAI) && !config.novitaai_avoidchat) {
+            delete config.novitaai;
+            let result = await this.NovitaAI.Chat(limitedMessages, config);
             return fixTruncatedFullText(result);
         }
         
@@ -564,6 +581,20 @@ class EasyAI {
         }
         
         if (this.DeepSeek) {
+            let systemMessage = config.systemMessage;
+            if (!systemMessage && config.systemType) {
+                systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];
+            }
+            
+            const final_prompt = NewChatPrompt.build(limitedMessages, systemMessage);
+            
+            return await this.Generate(final_prompt, {
+                ...config,
+                stop: ['<|im_end|>']
+            });
+        }
+        
+        if (this.NovitaAI) {
             let systemMessage = config.systemMessage;
             if (!systemMessage && config.systemType) {
                 systemMessage = NewChatPrompt.SYSTEM_TYPES[config.systemType];

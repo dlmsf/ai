@@ -58,6 +58,11 @@ class EasyAI_WebGPT {
       easyAIConfig.deepseek_token = config.deepseek_token;
       easyAIConfig.deepseek_model = config.deepseek_model;
     }
+    // If we have NovitaAI token, use that
+    else if (config.novitaai_token) {
+      easyAIConfig.novitaai_token = config.novitaai_token;
+      easyAIConfig.novitaai_model = config.novitaai_model;
+    }
     
     // If we have server URL, use that (with token if provided)
     if (config.easyai_url) {
@@ -73,6 +78,7 @@ class EasyAI_WebGPT {
       hasOpenAI: !!config.openai_token, 
       hasDeepInfra: !!config.deepinfra_token,
       hasDeepSeek: !!config.deepseek_token,
+      hasNovitaAI: !!config.novitaai_token,
       hasServerURL: !!config.easyai_url,
       hasToken: !!this.easyai_token
     });
@@ -195,13 +201,15 @@ class EasyAI_WebGPT {
               systemType: this.systemType
             };
             
-            // Add openai/deepinfra/deepseek flags only if those tokens exist
+            // Add openai/deepinfra/deepseek/novitaai flags only if those tokens exist
             if (config.openai_token) {
               chatConfig.openai = true;
             } else if (config.deepinfra_token) {
               chatConfig.deepinfra = true;
             } else if (config.deepseek_token) {
               chatConfig.deepseek = true;
+            } else if (config.novitaai_token) {
+              chatConfig.novitaai = true;
             }
             
             console.log('Calling AI.Chat with messages:', messagesForAI.length);
