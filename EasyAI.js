@@ -466,7 +466,7 @@ class EasyAI {
         }
     }
 
-    async Chat(messages = [], config = {}) {
+    async Chat(messages = [{ role: 'user', content: 'Who won the world series in 2020?' }], config = {}) {
         const cleanMessages = messages
             .filter(msg => msg && msg.role && msg.content)
             .map(msg => ({
