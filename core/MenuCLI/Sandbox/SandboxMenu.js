@@ -23,6 +23,7 @@ const SandboxMenu = async (props) => ({
         props.openai_token ? `OpenAI ${props.openai_model ? `(${ColorText.cyan(props.openai_model)})` : ''}` : 
         props.deepinfra_token ? `DeepInfra ${props.deepinfra_model ? `(${ColorText.cyan(props.deepinfra_model)})` : ''}` : 
         props.deepseek_token ? `DeepSeek ${props.deepseek_model ? `(${ColorText.cyan(props.deepseek_model)})` : ''}` : 
+        props.novitaai_token ? `NovitaAI ${props.novitaai_model ? `(${ColorText.cyan(props.novitaai_model)})` : ''}` : 
         `${props.server_url}${(props.server_port) ? `:${props.server_port}` : ''}`
     }`,
 options : [
@@ -39,7 +40,8 @@ options : [
                },
                ...(props.openai_token ? {openai: true} : {}),
                ...(props.deepinfra_token ? {deepinfra: true} : {}),
-               ...(props.deepseek_token ? {deepseek: true} : {})
+               ...(props.deepseek_token ? {deepseek: true} : {}),
+               ...(props.novitaai_token ? {novitaai: true} : {})
            })
         },{exitFunction : async () => {
             MenuCLI.rl = readline.createInterface({
@@ -245,7 +247,9 @@ options : [
                     deepinfra_token : props.deepinfra_token,
                     deepinfra_model : props.deepinfra_model,
                     deepseek_token : props.deepseek_token,
-                    deepseek_model : props.deepseek_model
+                    deepseek_model : props.deepseek_model,
+                    novitaai_token : props.novitaai_token,
+                    novitaai_model : props.novitaai_model
                 })
                 MenuCLI.displayMenu(SandboxMenu,{props : props,alert_emoji : '✔️',alert : 'WebGPT PM2 Server iniciado com sucesso !'})
             }

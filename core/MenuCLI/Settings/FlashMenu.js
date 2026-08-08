@@ -68,6 +68,7 @@ const createSaveSelectionMenu = (commandType, menuTitle, configKey, backMenu) =>
             options.push('DeepSeek')
             options.push('DeepInfra')
             options.push('OpenAI')
+            options.push('NovitaAI')
             options.push(['← Cancel |', '🗑️ Clear'])
             
             let result = await MenuCLI.displayMenuFromOptions(

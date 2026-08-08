@@ -9,6 +9,7 @@ import ConfigManager from "../ConfigManager.js"
 import FreePort from "../useful/FreePort.js"
 import DeepInfra from "../DeepInfra.js"
 import DeepSeek from "../DeepSeek.js"
+import NovitaAI from "../NovitaAI.js"
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -116,10 +117,11 @@ async function startWebGPT(argsToUse) {
     if (argsToUse.length > 0 || ConfigManager.getKey('defaultwebgptsave')) {
         let toload = (argsToUse.length > 0) ? argsToUse[0] : ConfigManager.getKey('defaultwebgptsave')
         
-        if(toload.toLowerCase() == 'openai' || toload.toLowerCase() == 'deepinfra' || toload.toLowerCase() == 'deepseek'){
+        if(toload.toLowerCase() == 'openai' || toload.toLowerCase() == 'deepinfra' || toload.toLowerCase() == 'deepseek' || toload.toLowerCase() == 'novitaai'){
             if((ConfigManager.getKey('openai') && toload.toLowerCase() == 'openai') || 
                (ConfigManager.getKey('deepinfra') && toload.toLowerCase() == 'deepinfra') ||
-               (ConfigManager.getKey('deepseek') && toload.toLowerCase() == 'deepseek')){
+               (ConfigManager.getKey('deepseek') && toload.toLowerCase() == 'deepseek') ||
+               (ConfigManager.getKey('novitaai') && toload.toLowerCase() == 'novitaai')){
                 
                 if(toload.toLowerCase() == 'openai' && ConfigManager.getKey('openai')){
                     let openai_info = ConfigManager.getKey('openai')
@@ -159,6 +161,20 @@ async function startWebGPT(argsToUse) {
                     })
                     ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                     console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                    
+                } else if (toload.toLowerCase() == 'novitaai' && ConfigManager.getKey('novitaai')) {
+                    let novitaai_info = ConfigManager.getKey('novitaai')
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        novitaai_token: novitaai_info.token, 
+                        novitaai_model: novitaai_info.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com NovitaAI!')
                     console.log(`📡 Process ID: ${webgpt_process_name}`)
                     console.log('💡 Use -r flag to restart: flash_webgpt -r')
                     process.exit(0)
@@ -242,6 +258,32 @@ async function startWebGPT(argsToUse) {
                     })
                     ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
                     console.log('✔️ WebGPT Server iniciado com sucesso com DeepSeek!')
+                    console.log(`📡 Process ID: ${webgpt_process_name}`)
+                    console.log('💡 Use -r flag to restart: flash_webgpt -r')
+                    process.exit(0)
+                    
+                } else if(toload.toLowerCase() == 'novitaai'){
+                    final_object.token = await cli.ask('NovitaAI Token: ')
+                    final_object.model = await cli.ask('Select the model', {
+                        options: NovitaAI.Models
+                    })
+                    let save = await cli.ask('Save the NovitaAI config? ', {
+                        options: ['yes', 'no']
+                    })
+                    if(save == 'yes'){
+                        ConfigManager.setKey('novitaai', final_object)
+                    }
+                    cli.close()
+                    console.clear()
+                    
+                    let port = await FreePort(3000)
+                    webgpt_process_name = await EasyAI.WebGPT.PM2({
+                        port: port,
+                        novitaai_token: final_object.token, 
+                        novitaai_model: final_object.model
+                    })
+                    ConfigManager.setKey('flash_webgpt_process', webgpt_process_name)
+                    console.log('✔️ WebGPT Server iniciado com sucesso com NovitaAI!')
                     console.log(`📡 Process ID: ${webgpt_process_name}`)
                     console.log('💡 Use -r flag to restart: flash_webgpt -r')
                     process.exit(0)

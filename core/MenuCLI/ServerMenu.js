@@ -8,6 +8,7 @@ import ConfigManager from '../ConfigManager.js'
 import PM2 from '../useful/PM2.js'
 import DeepInfra from '../DeepInfra.js'
 import DeepSeek from '../DeepSeek.js'
+import NovitaAI from '../NovitaAI.js'
 
 let easyai_config = {}
 let easyai_token = undefined
@@ -228,6 +229,8 @@ options : [
                         delete easyai_config.deepinfra_model
                         delete easyai_config.deepseek_token
                         delete easyai_config.deepseek_model
+                        delete easyai_config.novitaai_token
+                        delete easyai_config.novitaai_model
                         delete easyai_config.llama
                         
                         MenuCLI.displayMenu(CustomServer)
@@ -267,6 +270,8 @@ options : [
                 delete easyai_config.deepinfra_model
                 delete easyai_config.deepseek_token
                 delete easyai_config.deepseek_model
+                delete easyai_config.novitaai_token
+                delete easyai_config.novitaai_model
                 delete easyai_config.llama
                 
                 MenuCLI.displayMenu(CustomServer)
@@ -299,6 +304,8 @@ options : [
                             delete easyai_config.deepinfra_model
                             delete easyai_config.deepseek_token
                             delete easyai_config.deepseek_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -322,6 +329,8 @@ options : [
                             delete easyai_config.deepinfra_model
                             delete easyai_config.deepseek_token
                             delete easyai_config.deepseek_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -340,6 +349,8 @@ options : [
                             delete easyai_config.deepinfra_model
                             delete easyai_config.deepseek_token
                             delete easyai_config.deepseek_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -375,6 +386,8 @@ options : [
                     delete easyai_config.deepinfra_model
                     delete easyai_config.deepseek_token
                     delete easyai_config.deepseek_model
+                    delete easyai_config.novitaai_token
+                    delete easyai_config.novitaai_model
                     delete easyai_config.server_url
                     delete easyai_config.server_port
                     delete easyai_config.server_token
@@ -415,6 +428,8 @@ options : [
                             delete easyai_config.openai_model
                             delete easyai_config.deepseek_token
                             delete easyai_config.deepseek_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -433,6 +448,8 @@ options : [
                             delete easyai_config.openai_model
                             delete easyai_config.deepseek_token
                             delete easyai_config.deepseek_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -451,6 +468,8 @@ options : [
                             delete easyai_config.openai_model
                             delete easyai_config.deepseek_token
                             delete easyai_config.deepseek_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -481,6 +500,8 @@ options : [
                     delete easyai_config.openai_model
                     delete easyai_config.deepseek_token
                     delete easyai_config.deepseek_model
+                    delete easyai_config.novitaai_token
+                    delete easyai_config.novitaai_model
                     delete easyai_config.server_url
                     delete easyai_config.server_port
                     delete easyai_config.server_token
@@ -521,6 +542,8 @@ options : [
                             delete easyai_config.openai_model
                             delete easyai_config.deepinfra_token
                             delete easyai_config.deepinfra_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -539,6 +562,8 @@ options : [
                             delete easyai_config.openai_model
                             delete easyai_config.deepinfra_token
                             delete easyai_config.deepinfra_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -557,6 +582,8 @@ options : [
                             delete easyai_config.openai_model
                             delete easyai_config.deepinfra_token
                             delete easyai_config.deepinfra_model
+                            delete easyai_config.novitaai_token
+                            delete easyai_config.novitaai_model
                             delete easyai_config.server_url
                             delete easyai_config.server_port
                             delete easyai_config.server_token
@@ -587,6 +614,8 @@ options : [
                     delete easyai_config.openai_model
                     delete easyai_config.deepinfra_token
                     delete easyai_config.deepinfra_model
+                    delete easyai_config.novitaai_token
+                    delete easyai_config.novitaai_model
                     delete easyai_config.server_url
                     delete easyai_config.server_port
                     delete easyai_config.server_token
@@ -597,6 +626,120 @@ options : [
                 // Toggle OFF - remove token and model
                 delete easyai_config.deepseek_token
                 delete easyai_config.deepseek_model
+                MenuCLI.displayMenu(CustomServer)
+            }
+        }
+    },
+    {
+        name : `${ConfigManager.getKey('novitaai') ? `🌐 ${ColorText.green('NovitaAI')}` : `🌐 ${ColorText.red('NovitaAI')}`} | ${easyai_config.novitaai_token ? ColorText.green('ON') : ColorText.red('OFF')}`,
+        action : async () => {
+            // Check if currently enabled (has token)
+            if(!easyai_config.novitaai_token) {
+                // Turning ON - need to configure
+                if(ConfigManager.getKey('novitaai')){
+                    let obj = ConfigManager.getKey('novitaai')
+                    
+                    let response = await MenuCLI.ask('NovitaAI Configuration', {options : [
+                        `Use with current model (${ColorText.green(obj.model)})`,
+                        'Change model',
+                        'Edit token',
+                        'Clear configuration',
+                        'Cancel'
+                    ]})
+                    
+                    switch(response) {
+                        case `Use with current model (${ColorText.green(obj.model)})`:
+                            easyai_config.novitaai_token = obj.token
+                            easyai_config.novitaai_model = obj.model
+                            // Clear other configs
+                            delete easyai_config.openai_token
+                            delete easyai_config.openai_model
+                            delete easyai_config.deepinfra_token
+                            delete easyai_config.deepinfra_model
+                            delete easyai_config.deepseek_token
+                            delete easyai_config.deepseek_model
+                            delete easyai_config.server_url
+                            delete easyai_config.server_port
+                            delete easyai_config.server_token
+                            delete easyai_config.llama
+                            MenuCLI.displayMenu(CustomServer)
+                            break
+                            
+                        case 'Change model':
+                            let newModel = await MenuCLI.ask('Select the model', {options : NovitaAI.Models})
+                            obj.model = newModel
+                            ConfigManager.setKey('novitaai', obj)
+                            easyai_config.novitaai_token = obj.token
+                            easyai_config.novitaai_model = obj.model
+                            // Clear other configs
+                            delete easyai_config.openai_token
+                            delete easyai_config.openai_model
+                            delete easyai_config.deepinfra_token
+                            delete easyai_config.deepinfra_model
+                            delete easyai_config.deepseek_token
+                            delete easyai_config.deepseek_model
+                            delete easyai_config.server_url
+                            delete easyai_config.server_port
+                            delete easyai_config.server_token
+                            delete easyai_config.llama
+                            MenuCLI.displayMenu(CustomServer)
+                            break
+                            
+                        case 'Edit token':
+                            let newToken = await MenuCLI.ask('NovitaAI Token : ')
+                            obj.token = newToken
+                            ConfigManager.setKey('novitaai', obj)
+                            easyai_config.novitaai_token = obj.token
+                            easyai_config.novitaai_model = obj.model
+                            // Clear other configs
+                            delete easyai_config.openai_token
+                            delete easyai_config.openai_model
+                            delete easyai_config.deepinfra_token
+                            delete easyai_config.deepinfra_model
+                            delete easyai_config.deepseek_token
+                            delete easyai_config.deepseek_model
+                            delete easyai_config.server_url
+                            delete easyai_config.server_port
+                            delete easyai_config.server_token
+                            delete easyai_config.llama
+                            MenuCLI.displayMenu(CustomServer)
+                            break
+                            
+                        case 'Clear configuration':
+                            ConfigManager.deleteKey('novitaai')
+                            MenuCLI.displayMenu(CustomServer)
+                            break
+                            
+                        default:
+                            MenuCLI.displayMenu(CustomServer)
+                            break
+                    }
+                } else {
+                    let final_object = {}
+                    final_object.token = await MenuCLI.ask('NovitaAI Token : ')
+                    final_object.model = await MenuCLI.ask('Select the model',{options : NovitaAI.Models})
+                    if(await MenuCLI.ask('Save key and model?',{options : ['yes','no']}) == 'yes'){
+                        ConfigManager.setKey('novitaai',final_object)
+                    }
+                    easyai_config.novitaai_token = final_object.token
+                    easyai_config.novitaai_model = final_object.model
+                    // Clear other configs
+                    delete easyai_config.openai_token
+                    delete easyai_config.openai_model
+                    delete easyai_config.deepinfra_token
+                    delete easyai_config.deepinfra_model
+                    delete easyai_config.deepseek_token
+                    delete easyai_config.deepseek_model
+                    delete easyai_config.server_url
+                    delete easyai_config.server_port
+                    delete easyai_config.server_token
+                    delete easyai_config.llama
+                    MenuCLI.displayMenu(CustomServer)
+                }
+            } else {
+                // Toggle OFF - remove token and model
+                delete easyai_config.novitaai_token
+                delete easyai_config.novitaai_model
                 MenuCLI.displayMenu(CustomServer)
             }
         }

@@ -91,7 +91,7 @@ function attemptRequest({
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
       },
-      timeout: 10000
+      timeout: 120000
     };
     
     if (token) {
@@ -100,45 +100,72 @@ function attemptRequest({
 
     const req = protocol.request(options, (res) => {
       let hasResolved = false;
+      let buffer = '';
+      let finalResult = null;
 
       res.on('data', (chunk) => {
         const chunkData = chunk.toString();
-        const lines = chunkData.split('\n').filter(line => line.trim());
+        buffer += chunkData;
+        
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
         
         for (const line of lines) {
+          if (!line.trim()) continue;
+          
           try {
-            const parsedChunk = JSON.parse(line);
+            const parsedChunk = JSON.parse(line.trim());
             
-            if (parsedChunk.stream && parsedChunk.stream.content && config.stream) {
+            if (parsedChunk.stream && config.stream) {
               onData(parsedChunk);
-            } else if (!parsedChunk.stream && (parsedChunk.full_text !== undefined || parsedChunk.error !== undefined)) {
-              if (!hasResolved) {
-                hasResolved = true;
-                resolve(parsedChunk);
-                return;
-              }
-            } else if (parsedChunk.generation_settings) {
-              if (!hasResolved) {
-                hasResolved = true;
-                resolve(parsedChunk);
-                return;
+            } else if (parsedChunk.full_text !== undefined || parsedChunk.error !== undefined) {
+              finalResult = parsedChunk;
+            } else if (parsedChunk.choices?.[0]?.message?.content) {
+              finalResult = parsedChunk;
+            } else if (parsedChunk.choices?.[0]?.delta?.content) {
+              if (config.stream) {
+                onData(parsedChunk);
+              } else {
+                finalResult = parsedChunk;
               }
             }
           } catch (error) {
-            // Not valid JSON line, continue
+            // If JSON parsing fails, add back to buffer
+            buffer = line + '\n' + buffer;
           }
         }
       });
 
       res.on('end', () => {
         if (!hasResolved) {
-          const error = new Error('No valid response received from server');
-          reject(error);
+          hasResolved = true;
+          
+          if (buffer.trim()) {
+            try {
+              const parsed = JSON.parse(buffer.trim());
+              if (parsed.stream && config.stream) {
+                onData(parsed);
+              }
+              if (parsed.full_text !== undefined || parsed.choices?.[0]?.message?.content) {
+                finalResult = parsed;
+              }
+            } catch (error) {
+              // Ignore unparseable remaining data
+            }
+          }
+          
+          resolve(finalResult || { 
+            error: 'No valid response received from server',
+            full_text: '' 
+          });
         }
       });
 
       res.on('error', (error) => {
-        reject(error);
+        if (!hasResolved) {
+          hasResolved = true;
+          reject(error);
+        }
       });
     });
 
@@ -165,7 +192,7 @@ function consumeGenerateRoute({
   onData = () => {}
 }) {
   return new Promise(async (resolve) => {
-    const maxRetryTime = 30000;
+    const maxRetryTime = 60000;
     const retryDelay = 500;
     const startTime = Date.now();
     

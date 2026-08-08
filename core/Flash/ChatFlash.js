@@ -13,6 +13,7 @@ import ChatHUD from "../ChatHUD.js";
 import { forceCleanAllReadlineInterfaces } from "../util/cleanup.js"
 import DeepInfra from "../DeepInfra.js"
 import DeepSeek from "../DeepSeek.js"
+import NovitaAI from "../NovitaAI.js"
 
 let ai
 let process_name
@@ -283,6 +284,33 @@ async function setupDeepSeek() {
     })
 }
 
+// NovitaAI setup
+async function setupNovitaAI() {
+    let cli = new TerminalHUD()
+    let final_object = {}
+    
+    final_object.token = await cli.ask('NovitaAI Token: ')
+    final_object.model = await cli.ask('Select the model', {
+        options: NovitaAI.Models
+    })
+    
+    let save = await cli.ask('Save the NovitaAI config? ', {
+        options: ['yes', 'no']
+    })
+    
+    if (save == 'yes') {
+        ConfigManager.setKey('novitaai', final_object)
+    }
+    
+    await closeMenuAndStartChat(cli, () => {
+        ai = new EasyAI({
+            novitaai_token: final_object.token,
+            novitaai_model: final_object.model
+        })
+        StartChat(ai)
+    })
+}
+
 // Handle saved server
 async function handleSavedServer(saveName) {
     try {
@@ -400,6 +428,21 @@ async function main() {
             StartChat(ai)
         } else {
             await setupDeepSeek()
+        }
+        return
+    }
+    
+    // Handle NovitaAI
+    if (toloadLower === 'novitaai') {
+        if (ConfigManager.getKey('novitaai')) {
+            const novitaai_info = ConfigManager.getKey('novitaai')
+            ai = new EasyAI({
+                novitaai_token: novitaai_info.token,
+                novitaai_model: novitaai_info.model
+            })
+            StartChat(ai)
+        } else {
+            await setupNovitaAI()
         }
         return
     }
