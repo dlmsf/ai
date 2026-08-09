@@ -177,7 +177,7 @@ class EasyAI {
         
         if(ConfigManager.getKey('start-llamacpp-instanceslog')){this.Config.Llamacpp_InstancesRawLog = true}
 
-        this.ChatModule = new ChatModule()
+        //this.ChatModule = new ChatModule()
         this.OpenAI = (config.openai_token) ? new OpenAI(config.openai_token,{model : config.openai_model}) : null
         this.DeepInfra = (config.deepinfra_token) ? new DeepInfra(config.deepinfra_token,{model : config.deepinfra_model,log : config.deepinfra_log}) : null
         this.DeepSeek = (config.deepseek_token) ? new DeepSeek(config.deepseek_token,{model : config.deepseek_model,log : config.deepseek_log}) : null

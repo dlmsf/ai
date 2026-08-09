@@ -301,7 +301,8 @@ export class JSONStorage extends StorageConnection {
         this.isWriting = false;
         this.pendingWrites = 0;
         
-        fsSync.mkdirSync(this.folder, { recursive: true });
+        //THE SNIPE BELOW WAS UNCOMMENTED IN THE ORIGINAL VERSION, UNCOMENT TO TEST
+        //fsSync.mkdirSync(this.folder, { recursive: true });
         
         // Mark as non-proxyable
         this.__isStorage = true;
