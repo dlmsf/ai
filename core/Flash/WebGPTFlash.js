@@ -293,6 +293,10 @@ async function startWebGPT(argsToUse) {
             // Handle saved server configuration
             await ServerSaves.Load(toload)
             .then(async (save) => {
+                if (save.KillAllPM2) {
+                    await PM2.Delete('all')
+                }
+                
                 // Start the AI server first
                 ai_process_name = await EasyAI.Server.PM2({
                     token: save.Token,

@@ -316,6 +316,10 @@ async function handleSavedServer(saveName) {
     try {
         const save = await ServerSaves.Load(saveName)
         
+        if (save.KillAllPM2) {
+            await PM2.Delete('all')
+        }
+        
         process_name = await EasyAI.Server.PM2({
             handle_port: false,
             token: save.Token,

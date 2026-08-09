@@ -15,6 +15,7 @@ let easyai_token = undefined
 let easyai_port = 4000
 let webgpt_port = 3000
 let withPM2 = false
+let killAllPM2 = false
 
 let models_options = async () => {
     let final_array = []
@@ -56,6 +57,7 @@ let save_options = async (config = {}) => {
                 webgpt_port = save.Webgpt_Port || 3000
                 easyai_token = save.Token || undefined
                 withPM2 = save.PM2
+                killAllPM2 = save.KillAllPM2 || false
                 MenuCLI.displayMenu(CustomServer)
                 } else if (config.delmenu) {
                     let response = await MenuCLI.displayMenuFromOptions(`Confirm delete of ${ColorText.cyan(e)}? This is ${ColorText.red('irreversible.')}`,[ColorText.green('yes'),ColorText.red('no')])
@@ -109,6 +111,10 @@ options : [
     {
     name : ColorText.yellow('⚡ Start ⚡'),
     action : async () => {
+
+        if(killAllPM2){
+            await PM2.Delete('all')
+        }
 
         if(withPM2){
             await EasyAI.Server.PM2({token : easyai_token,port : easyai_port,EasyAI_Config : easyai_config})
@@ -182,6 +188,13 @@ options : [
         name : `PM2 | ${withPM2 ? ColorText.green('ON') : ColorText.red('OFF')}`,
         action : async () => {
             withPM2 = !withPM2
+            MenuCLI.displayMenu(CustomServer) 
+        }
+    },
+    {
+        name : `PM2 Clear | ${killAllPM2 ? ColorText.green('ON') : ColorText.red('OFF')}`,
+        action : async () => {
+            killAllPM2 = !killAllPM2
             MenuCLI.displayMenu(CustomServer) 
         }
     },
@@ -791,7 +804,8 @@ options : [
             webgpt_port: webgpt_port, 
             token: easyai_token,  // This saves the server access token
             port: easyai_port, 
-            EasyAI_Config: easyai_config 
+            EasyAI_Config: easyai_config,
+            killAllPM2: killAllPM2
           });
           if (save_result === false) {
             let result = await MenuCLI.displayMenuFromOptions(`⛔ Save already exists\nOverwrite?`, ['Overwrite', 'Cancel']);
@@ -801,7 +815,8 @@ options : [
                 token: easyai_token,  // This saves the server access token
                 webgpt_port: webgpt_port, 
                 port: easyai_port, 
-                EasyAI_Config: easyai_config 
+                EasyAI_Config: easyai_config,
+                killAllPM2: killAllPM2
               });
               MenuCLI.displayMenu(CustomServer, { props: { save_message: '✔️ Settings saved successfully!' } });
             } else {
@@ -837,6 +852,10 @@ let server_menu_options = async () => {
            withPM2 = true
         }
 
+        if(killAllPM2){
+            await PM2.Delete('all')
+        }
+
         if(withPM2){
             await EasyAI.Server.PM2({token : easyai_token,port : easyai_port,EasyAI_Config : easyai_config})
             MenuCLI.displayMenu(ServerMenu,{alert_emoji : '✔️',alert : 'PM2 Server iniciado com sucesso !'})
@@ -862,6 +881,7 @@ let server_menu_options = async () => {
          }
         easyai_port = 4000
         easyai_token = undefined
+        killAllPM2 = false
         MenuCLI.displayMenu(CustomServer)
         }
     },

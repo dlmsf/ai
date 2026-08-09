@@ -87,6 +87,10 @@ if (args.length > 0 || ConfigManager.getKey('defaultgeneratesave')) {
     await ServerSaves.Load(toload)
     .then(async (save) => {
 
+            if (save.KillAllPM2) {
+                await PM2.Delete('all')
+            }
+
             process_name = await EasyAI.Server.PM2({handle_port : false,token : save.Token,port : save.Port,EasyAI_Config : save.EasyAI_Config})
             console.log('✔️ PM2 Server iniciado com sucesso !')
             ai = new EasyAI({server_url : 'localhost',server_port : save.Port})
@@ -114,4 +118,3 @@ if (args.length > 0 || ConfigManager.getKey('defaultgeneratesave')) {
     ai = new EasyAI({server_url : 'localhost',server_port : port})
     StartGenerate(ai,process_name)
 }
-
