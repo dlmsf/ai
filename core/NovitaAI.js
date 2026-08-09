@@ -96,10 +96,12 @@ class NovitaAI {
     static Models = [
         'meta-llama/llama-3.1-8b-instruct',
         'deepseek/deepseek-v4-flash-0731',
+        'meta-llama/llama-3.3-70b-instruct',
         'deepseek/deepseek-v4-pro',
         'deepseek/deepseek-v4-flash',
         'meta-llama/llama-3.2-1b-instruct',
         'meta-llama/llama-3.2-3b-instruct',
+        
     ];
 
     /*
