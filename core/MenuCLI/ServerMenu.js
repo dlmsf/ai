@@ -802,21 +802,21 @@ options : [
           let save_result = await ServerSaves.Save(name, { 
             pm2: withPM2, 
             webgpt_port: webgpt_port, 
-            token: easyai_token,  // This saves the server access token
+            token: easyai_token,
             port: easyai_port, 
             EasyAI_Config: easyai_config,
-            killAllPM2: killAllPM2
+            KillAllPM2: killAllPM2
           });
           if (save_result === false) {
             let result = await MenuCLI.displayMenuFromOptions(`⛔ Save already exists\nOverwrite?`, ['Overwrite', 'Cancel']);
             if (result == 'Overwrite') {
               await ServerSaves.ForceSave(name, { 
                 pm2: withPM2, 
-                token: easyai_token,  // This saves the server access token
+                token: easyai_token,
                 webgpt_port: webgpt_port, 
                 port: easyai_port, 
                 EasyAI_Config: easyai_config,
-                killAllPM2: killAllPM2
+                KillAllPM2: killAllPM2
               });
               MenuCLI.displayMenu(CustomServer, { props: { save_message: '✔️ Settings saved successfully!' } });
             } else {

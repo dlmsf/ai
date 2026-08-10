@@ -6,6 +6,7 @@ import ServerSaves from "./ServerSaves.js";
 import ColorText from "../useful/ColorText.js";
 import EasyAI from "../../EasyAI.js";
 import ConfigManager from "../ConfigManager.js";
+import PM2 from "../useful/PM2.js";
 
 const MenuCLI = new TerminalHUD()
 
@@ -21,6 +22,10 @@ if (args.length > 0) {
     
     await ServerSaves.Load(args[0])
     .then(async (save) => {
+
+        if (save.KillAllPM2) {
+            await PM2.Delete('all')
+        }
 
         if(save.PM2){
             await EasyAI.Server.PM2({token : save.Token,port : save.Port,EasyAI_Config : save.EasyAI_Config})

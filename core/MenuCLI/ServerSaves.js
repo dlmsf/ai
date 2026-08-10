@@ -12,7 +12,7 @@ class ServerSaves {
     }
   }
 
-  static async Save(name, { webgpt_port, pm2,token, port, EasyAI_Config = {} }) {
+  static async Save(name, { webgpt_port, pm2, token, port, EasyAI_Config = {}, KillAllPM2 = false }) {
     await this.ensureFileExists();
     const data = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
     const existingIndex = data.findIndex((save) => save.Name === name);
@@ -21,20 +21,20 @@ class ServerSaves {
       return false
     }
 
-    data.push({ Name: name,Token : token,Webgpt_Port : webgpt_port,PM2 : pm2, Port: port, EasyAI_Config });
+    data.push({ Name: name, Token: token, Webgpt_Port: webgpt_port, PM2: pm2, Port: port, EasyAI_Config, KillAllPM2 });
     await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2));
     return true
   }
 
-  static async ForceSave(name, { webgpt_port,pm2, token, port, EasyAI_Config = {} }) {
+  static async ForceSave(name, { webgpt_port, pm2, token, port, EasyAI_Config = {}, KillAllPM2 = false }) {
     await this.ensureFileExists();
     let data = JSON.parse(await fs.promises.readFile(filePath, 'utf8'));
     const existingIndex = data.findIndex((save) => save.Name === name);
 
     if (existingIndex !== -1) {
-      data[existingIndex] = { Name: name, Token: token,Webgpt_Port : webgpt_port, PM2: pm2, Port: port, EasyAI_Config };
+      data[existingIndex] = { Name: name, Token: token, Webgpt_Port: webgpt_port, PM2: pm2, Port: port, EasyAI_Config, KillAllPM2 };
     } else {
-      data.push({ Name: name, Token: token, Webgpt_Port : webgpt_port,PM2: pm2, Port: port, EasyAI_Config });
+      data.push({ Name: name, Token: token, Webgpt_Port: webgpt_port, PM2: pm2, Port: port, EasyAI_Config, KillAllPM2 });
     }
 
     await fs.promises.writeFile(filePath, JSON.stringify(data, null, 2));
