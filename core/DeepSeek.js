@@ -443,6 +443,9 @@ class DeepSeek {
             let fullResponse = '';
             let buffer = '';
             let usageData = null; // for streaming mode
+            let streamId = null;
+            let streamCreated = null;
+            let streamModel = null;
 
             const req = https.request(options, res => {
                 // Handle authentication errors (401, 403, etc.)
@@ -463,24 +466,26 @@ class DeepSeek {
                                 return;
                             }
                             const content = parsed.choices?.[0]?.message?.content || '';
+                            const usage = parsed.usage;
                             
                             // Calculate estimated cost
-                            const estimatedCost = parsed.usage 
-                                ? this._calculateCost(config.model, parsed.usage)
-                                : 0;
+                            let estimatedCost = null;
+                            if (usage) {
+                                estimatedCost = this._calculateCost(config.model, usage);
+                                usage.estimated_cost = estimatedCost;
+                            }
                             
-                            if (this.Log && parsed.usage) {
-                                console.log(`${ColorText.cyan(`[${brasilDateTime()}] ${config.model}(DeepSeek)`)} |${ColorText.red(` Cost : $${estimatedCost.toFixed(8)}`)} | Input Tokens : ${ColorText.yellow(parsed.usage.prompt_tokens)} | Output Tokens : ${ColorText.yellow(parsed.usage.completion_tokens)} | Cache Hit Tokens : ${ColorText.yellow(parsed.usage.prompt_cache_hit_tokens || 0)} | Cache Miss Tokens : ${ColorText.yellow(parsed.usage.prompt_cache_miss_tokens || parsed.usage.prompt_tokens)}`);
+                            if (this.Log && usage) {
+                                console.log(`${ColorText.cyan(`[${brasilDateTime()}] ${config.model}(DeepSeek)`)} |${ColorText.red(` Cost : $${estimatedCost?.toFixed(8) || 'N/A'}`)} | Input Tokens : ${ColorText.yellow(usage.prompt_tokens)} | Output Tokens : ${ColorText.yellow(usage.completion_tokens)} | Cache Hit Tokens : ${ColorText.yellow(usage.prompt_cache_hit_tokens || 0)} | Cache Miss Tokens : ${ColorText.yellow(usage.prompt_cache_miss_tokens || usage.prompt_tokens)}`);
                             }
                             
                             resolve({
                                 full_text: content,
                                 metadata: {
-                                    usage: parsed.usage,
+                                    usage: usage,
                                     id: parsed.id,
                                     created: parsed.created,
-                                    model: parsed.model,
-                                    estimated_cost: estimatedCost
+                                    model: parsed.model
                                 }
                             });
                         } catch (err) {
@@ -509,6 +514,11 @@ class DeepSeek {
 
                         try {
                             const parsed = JSON.parse(line);
+
+                            // Capture stream metadata from first chunk
+                            if (!streamId && parsed.id) streamId = parsed.id;
+                            if (!streamCreated && parsed.created) streamCreated = parsed.created;
+                            if (!streamModel && parsed.model) streamModel = parsed.model;
 
                             // Capture usage if present (usually final chunk)
                             if (parsed.usage) {
@@ -540,12 +550,14 @@ class DeepSeek {
 
                 res.on('end', () => {
                     // Calculate estimated cost and log if enabled
-                    const estimatedCost = usageData 
-                        ? this._calculateCost(config.model, usageData)
-                        : 0;
+                    let estimatedCost = null;
+                    if (usageData) {
+                        estimatedCost = this._calculateCost(config.model, usageData);
+                        usageData.estimated_cost = estimatedCost;
+                    }
                     
                     if (this.Log && usageData) {
-                        console.log(`${ColorText.cyan(`[${brasilDateTime()}] ${config.model}(DeepSeek)`)} |${ColorText.red(` Cost : $${estimatedCost.toFixed(8)}`)} | Input Tokens : ${ColorText.yellow(usageData.prompt_tokens)} | Output Tokens : ${ColorText.yellow(usageData.completion_tokens)} | Cache Hit Tokens : ${ColorText.yellow(usageData.prompt_cache_hit_tokens || 0)} | Cache Miss Tokens : ${ColorText.yellow(usageData.prompt_cache_miss_tokens || usageData.prompt_tokens)}`);
+                        console.log(`${ColorText.cyan(`[${brasilDateTime()}] ${config.model}(DeepSeek)`)} |${ColorText.red(` Cost : $${estimatedCost?.toFixed(8) || 'N/A'}`)} | Input Tokens : ${ColorText.yellow(usageData.prompt_tokens)} | Output Tokens : ${ColorText.yellow(usageData.completion_tokens)} | Cache Hit Tokens : ${ColorText.yellow(usageData.prompt_cache_hit_tokens || 0)} | Cache Miss Tokens : ${ColorText.yellow(usageData.prompt_cache_miss_tokens || usageData.prompt_tokens)}`);
                     }
                     
                     resolve({
@@ -553,7 +565,9 @@ class DeepSeek {
                         metadata: {
                             streamed: true,
                             usage: usageData,
-                            estimated_cost: estimatedCost
+                            id: streamId,
+                            created: streamCreated,
+                            model: streamModel
                         }
                     });
                 });
