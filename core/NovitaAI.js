@@ -101,6 +101,7 @@ class NovitaAI {
         'deepseek/deepseek-v4-flash',
         'meta-llama/llama-3.2-1b-instruct',
         'meta-llama/llama-3.2-3b-instruct',
+        'zai-org/glm-4.7'
         
     ];
 

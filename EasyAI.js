@@ -478,26 +478,52 @@ class EasyAI {
     }
 
     async Chat(messages = [{ role: 'user', content: 'Who won the world series in 2020?' }], config = {}) {
+        // Clean and validate messages - FIXED: Proper structural check instead of substring matching
         const cleanMessages = messages
-            .filter(msg => msg && msg.role && msg.content)
-            .map(msg => ({
-                role: msg.role,
-                content: typeof msg.content === 'string' 
-                    ? msg.content 
-                    : String(msg.content)
-            }))
-            .filter(msg => {
-                const isJsonStream = msg.content.includes('"full_text"') || 
-                                    msg.content.includes('"stream"') ||
-                                    msg.content.includes('"token"')
-                if (isJsonStream) {
-                    console.warn('Filtered out JSON stream data from message')
-                    return false
+            .filter(msg => msg && typeof msg.role === 'string' && msg.content !== undefined && msg.content !== null)
+            .map(msg => {
+                let content = msg.content;
+                
+                // If the content is an object (likely a stray response object), check if it's stream data
+                if (typeof content === 'object' && content !== null) {
+                    // If it has stream/full_text/token properties, it's a response object – skip it
+                    if (content.stream || content.full_text || content.token) {
+                        console.warn('Filtered out JSON stream object from message');
+                        return null;
+                    }
+                    // Otherwise stringify it (shouldn't normally happen with user messages)
+                    content = JSON.stringify(content);
+                } else if (typeof content !== 'string') {
+                    content = String(content);
                 }
-                return true
+                
+                return {
+                    role: msg.role,
+                    content: content
+                };
             })
+            .filter(msg => msg !== null)
+            // Only filter out messages that are clearly serialized JSON stream data
+            .filter(msg => {
+                const content = msg.content;
+                // Quick check: if it looks like JSON, parse and check for stream/full_text/token keys
+                if (content.trim().startsWith('{') && content.trim().endsWith('}')) {
+                    try {
+                        const parsed = JSON.parse(content);
+                        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                            if (parsed.stream || parsed.full_text || parsed.token) {
+                                console.warn('Filtered out JSON stream data from message');
+                                return false;
+                            }
+                        }
+                    } catch (e) {
+                        // Not valid JSON – keep the message
+                    }
+                }
+                return true;
+            });
         
-        const limitedMessages = cleanMessages.slice(-20)
+        const limitedMessages = cleanMessages.slice(-20);
         
         const isStreaming = typeof config.tokenCallback === 'function' && isNonEmptyFunction(config.tokenCallback);
         config.stream = isStreaming;

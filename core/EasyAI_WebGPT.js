@@ -11,6 +11,7 @@ import ChatView from './ChatView.js'
 import { promisify } from 'util';
 import { networkInterfaces } from 'os';
 import FreePort from './useful/FreePort.js';
+import crypto from 'crypto';
 
 const writeFile = promisify(fs.writeFile);
 const unlink = promisify(fs.unlink);
@@ -32,13 +33,24 @@ class EasyAI_WebGPT {
 
     this.handle_port = config.handle_port || true
     this.port = config.port || 3000;
-    this.Chat = new Chat();
     
     // Store the token for later use in requests
     this.easyai_token = config.easyai_token || null;
     
-    // Store messages in the format Chat() expects
-    this.messages = []; // We'll use this alongside Chat.Historical for compatibility
+    // Session store - each session has its own Chat and messages array
+    this.sessions = new Map();
+    
+    // Session cleanup - remove old sessions after 30 minutes of inactivity
+    this.SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes
+    setInterval(() => {
+      const now = Date.now();
+      for (const [sessionId, session] of this.sessions.entries()) {
+        if (now - session.lastActivity > this.SESSION_TIMEOUT) {
+          this.sessions.delete(sessionId);
+          console.log(`Session ${sessionId} expired and removed`);
+        }
+      }
+    }, 60 * 1000); // Check every minute
     
     // Build the config for EasyAI based on what's provided
     const easyAIConfig = {};
@@ -93,7 +105,7 @@ class EasyAI_WebGPT {
       const setCORSHeaders = (res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Cache-Control, X-Session-Id');
       };
 
       // Handle preflight requests
@@ -110,20 +122,35 @@ class EasyAI_WebGPT {
         try {
           // 1. Create temporary file with ChatView.Html() content
           const tempFilePath = path.join(process.cwd(), 'temp_chat.html');
-          await writeFile(tempFilePath, ChatView.Html(), 'utf8');
           
-          // 2. Use your existing file-serving logic
-          let filePath = config.htmlpath || './core/chat.html';
-          if (!fs.existsSync(path.resolve(process.cwd(), filePath))) {
-              const currentModulePath = path.dirname(fileURLToPath(import.meta.url));
-              filePath = path.join(currentModulePath, 'chat.html');
-          }
+          // Generate a unique session ID and inject it into the HTML
+          const sessionId = crypto.randomBytes(16).toString('hex');
+          let htmlContent = ChatView.Html();
           
-          // 3. Temporarily override the file path to use our temp file
-          filePath = tempFilePath;
+          // Inject session ID into the HTML so the frontend can use it
+          htmlContent = htmlContent.replace('</head>', `
+            <script>
+              // Store session ID for all subsequent requests
+              window.SESSION_ID = '${sessionId}';
+              // Override fetch to include session ID in all POST requests
+              const originalFetch = window.fetch;
+              window.fetch = function(url, options = {}) {
+                if (options.method === 'POST') {
+                  options.headers = options.headers || {};
+                  options.headers['X-Session-Id'] = window.SESSION_ID;
+                }
+                return originalFetch.call(this, url, options);
+              };
+            </script>
+          </head>`);
+          
+          await writeFile(tempFilePath, htmlContent, 'utf8');
+          
+          // Create the session immediately
+          this.getOrCreateSession(sessionId);
           
           // 4. Read and serve the file
-          fs.readFile(filePath, 'utf8', async (err, content) => {
+          fs.readFile(tempFilePath, 'utf8', async (err, content) => {
               try {
                   // 5. Delete the temp file after sending response
                   await unlink(tempFilePath).catch(console.error);
@@ -150,12 +177,22 @@ class EasyAI_WebGPT {
           try {
             const { message } = JSON.parse(body);
             
-            // Add user message to both storage formats (for compatibility)
-            this.Chat.NewMessage('User: ', message);
-            this.messages.push({ role: 'user', content: message });
+            // Get session ID from header
+            const sessionId = req.headers['x-session-id'];
+            if (!sessionId) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ error: 'No session ID provided' }));
+              return;
+            }
+            
+            // Get or create session
+            const session = this.getOrCreateSession(sessionId);
+            
+            // Add user message to session
+            session.messages.push({ role: 'user', content: message });
 
-            // Build messages array for Chat() method
-            const messagesForAI = this.messages.map(msg => ({
+            // Build messages array for AI
+            const messagesForAI = session.messages.map(msg => ({
               role: msg.role,
               content: msg.content
             }));
@@ -212,17 +249,17 @@ class EasyAI_WebGPT {
               chatConfig.novitaai = true;
             }
             
-            console.log('Calling AI.Chat with messages:', messagesForAI.length);
+            console.log(`Session ${sessionId}: Calling AI.Chat with ${messagesForAI.length} messages`);
             
             const result = await this.AI.Chat(messagesForAI, chatConfig);
 
-            // After streaming completes, store ONLY the clean text response
+            // After streaming completes, store the response in session
             const finalResponse = fullResponse || (result?.full_text || '');
             
             if (finalResponse) {
-              // Add to both storage formats
-              this.Chat.NewMessage('AI: ', finalResponse);
-              this.messages.push({ role: 'assistant', content: finalResponse });
+              // Add to session messages
+              session.messages.push({ role: 'assistant', content: finalResponse });
+              session.lastActivity = Date.now();
             }
             
             res.write('data: [DONE]\n\n');
@@ -234,10 +271,24 @@ class EasyAI_WebGPT {
           }
         });
       } else if (req.method === 'POST' && req.url === '/reset') {
-        this.Chat.Reset();
-        this.messages = []; // Also reset the messages array
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'reset' }));
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+          try {
+            // Get session ID from header
+            const sessionId = req.headers['x-session-id'];
+            if (sessionId && this.sessions.has(sessionId)) {
+              this.sessions.delete(sessionId);
+              console.log(`Session ${sessionId} reset`);
+            }
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'reset' }));
+          } catch (error) {
+            console.error('Error resetting session:', error);
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Internal server error' }));
+          }
+        });
       } else {
         res.writeHead(404);
         res.end('Not Found');
@@ -245,6 +296,25 @@ class EasyAI_WebGPT {
     });
 
     EasyAI_WebGPT.instance = this;
+  }
+
+  /**
+   * Get or create a session for the given session ID
+   */
+  getOrCreateSession(sessionId) {
+    if (!this.sessions.has(sessionId)) {
+      console.log(`Creating new session: ${sessionId}`);
+      this.sessions.set(sessionId, {
+        id: sessionId,
+        messages: [],  // Array of {role, content}
+        lastActivity: Date.now(),
+        createdAt: Date.now()
+      });
+    }
+    
+    const session = this.sessions.get(sessionId);
+    session.lastActivity = Date.now();
+    return session;
   }
 
   getPrimaryIP() {
@@ -276,7 +346,7 @@ server.start()`
 
     try {
       await execAsync(`pm2 start ${serverScriptPath}`);
-      return uniqueFileName.slice(0,uniqueFileName.length-4);;
+      return uniqueFileName.slice(0,uniqueFileName.length-4);
     } catch (error) {
       console.error("PM2 error:", error.message);
       return false;
@@ -290,6 +360,7 @@ server.start()`
     this.server.listen(this.port, () => {
         const primaryIP = this.getPrimaryIP();
         console.log(`EasyAI WebGPT server is running on http://${primaryIP}:${this.port}`);
+        console.log(`Sessions: Each browser tab gets its own independent chat session`);
         if (this.easyai_token) {
           console.log(`🔑 Using token: ${this.easyai_token.substring(0, 8)}...`);
         }

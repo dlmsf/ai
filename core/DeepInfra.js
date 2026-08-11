@@ -104,6 +104,7 @@ class DeepInfra {
         'meta-llama/Meta-Llama-3.1-8B-Instruct',
         'deepseek-ai/DeepSeek-V4-Pro',
         'Qwen/Qwen3-235B-A22B-Instruct-2507',
+        'zai-org/GLM-4.7',
         'zai-org/GLM-4.7-Flash',
         'openai/gpt-oss-20b',
         'openai/gpt-oss-120b'
