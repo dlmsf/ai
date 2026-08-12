@@ -101,13 +101,14 @@ async function CompletionPostRequest(bodyObject,config,streamCallback,port = 808
                         }
                         stream = JSON.parse(stream);
                         if(stream.generation_settings){
+                            delete stream.streamLog;
                             stream.content = final_text
                             resolve(stream)
                         } else {
                             //Aqui inserir a maneira de cuspir esses stream_event 
                             //para forada função sem perder o resolve final com o objeto completo
                             final_text += stream.content
-                            streamCallback && streamCallback({full_text : final_text,stream})
+                            streamCallback && streamCallback({stream})
                         }
                         //console.log("Received streamed message:", stream);
                     } catch (error) {

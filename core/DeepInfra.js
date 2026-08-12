@@ -1,87 +1,87 @@
 import https from 'https';
+import { StringDecoder } from 'node:string_decoder';
 
 const brasilDateTime = () => new Date().toLocaleString('pt-BR', {timeZone: 'America/Sao_Paulo'});
 
 class ColorText {
     static red(text) {
-        return `\x1b[31m${text}\x1b[0m`; // Red text
+        return `\x1b[31m${text}\x1b[0m`;
     }
 
     static green(text) {
-        return `\x1b[38;5;82m${text}\x1b[0m`; // Green text
+        return `\x1b[38;5;82m${text}\x1b[0m`;
     }
 
     static yellow(text) {
-        return `\x1b[33m${text}\x1b[0m`; // Yellow text
+        return `\x1b[33m${text}\x1b[0m`;
     }
 
     static blue(text) {
-        return `\x1b[34m${text}\x1b[0m`; // Blue text
+        return `\x1b[34m${text}\x1b[0m`;
     }
 
     static magenta(text) {
-        return `\x1b[35m${text}\x1b[0m`; // Magenta text
+        return `\x1b[35m${text}\x1b[0m`;
     }
 
     static cyan(text) {
-        return `\x1b[36m${text}\x1b[0m`; // Cyan text
+        return `\x1b[36m${text}\x1b[0m`;
     }
 
     static white(text) {
-        return `\x1b[37m${text}\x1b[0m`; // White text
+        return `\x1b[37m${text}\x1b[0m`;
     }
 
     static orange(text) {
-        return `\x1b[38;5;208m${text}\x1b[0m`; // Orange text
+        return `\x1b[38;5;208m${text}\x1b[0m`;
     }
 
-    // Additional colors
     static black(text) {
-        return `\x1b[30m${text}\x1b[0m`; // Black text
+        return `\x1b[30m${text}\x1b[0m`;
     }
 
     static brightRed(text) {
-        return `\x1b[91m${text}\x1b[0m`; // Bright red text
+        return `\x1b[91m${text}\x1b[0m`;
     }
 
     static brightGreen(text) {
-        return `\x1b[92m${text}\x1b[0m`; // Bright green text
+        return `\x1b[92m${text}\x1b[0m`;
     }
 
     static brightYellow(text) {
-        return `\x1b[93m${text}\x1b[0m`; // Bright yellow text
+        return `\x1b[93m${text}\x1b[0m`;
     }
 
     static brightBlue(text) {
-        return `\x1b[94m${text}\x1b[0m`; // Bright blue text
+        return `\x1b[94m${text}\x1b[0m`;
     }
 
     static brightMagenta(text) {
-        return `\x1b[95m${text}\x1b[0m`; // Bright magenta text
+        return `\x1b[95m${text}\x1b[0m`;
     }
 
     static brightCyan(text) {
-        return `\x1b[96m${text}\x1b[0m`; // Bright cyan text
+        return `\x1b[96m${text}\x1b[0m`;
     }
 
     static brightWhite(text) {
-        return `\x1b[97m${text}\x1b[0m`; // Bright white text
+        return `\x1b[97m${text}\x1b[0m`;
     }
 
     static gray(text) {
-        return `\x1b[90m${text}\x1b[0m`; // Gray text
+        return `\x1b[90m${text}\x1b[0m`;
     }
 
     static lightGray(text) {
-        return `\x1b[37m${text}\x1b[0m`; // Light gray text (same as white)
+        return `\x1b[37m${text}\x1b[0m`;
     }
 
     static darkGray(text) {
-        return `\x1b[90m${text}\x1b[0m`; // Dark gray text (same as gray)
+        return `\x1b[90m${text}\x1b[0m`;
     }
 
     static custom(text, colorCode) {
-        return `\x1b[38;5;${colorCode}m${text}\x1b[0m`; // Custom color text
+        return `\x1b[38;5;${colorCode}m${text}\x1b[0m`;
     }
 }
 
@@ -108,7 +108,7 @@ class DeepInfra {
         'zai-org/GLM-4.7-Flash',
         'openai/gpt-oss-20b',
         'openai/gpt-oss-120b'
-    ]
+    ];
 
     /**
      * Handles fallback streaming when API fails
@@ -124,7 +124,6 @@ class DeepInfra {
                 const streamNext = () => {
                     if (i < tokens.length) {
                         config.tokenCallback({ 
-                            full_text: fullText.substring(0, fullText.indexOf(tokens[i]) + tokens[i].length),
                             stream: { content: tokens[i] } 
                         });
                         i++;
@@ -170,7 +169,6 @@ class DeepInfra {
 
     async Chat(messages = [{ role: 'user', content: 'Who won the world series in 2020?' }], config = {}) {
         config.model = config.model || this.model;
-        
 
         const requestBody = {
             model: config.model,
@@ -209,36 +207,48 @@ class DeepInfra {
         };
 
         return new Promise((resolve) => {
-            let fullResponse = '';
-            let buffer = '';
-            let usageData = null; // for streaming mode
-            let streamId = null;
-            let streamCreated = null;
-            let streamModel = null;
+            let settled = false;
+            const settle = (value) => {
+                if (!settled) {
+                    settled = true;
+                    resolve(value);
+                }
+            };
 
             const req = https.request(options, res => {
                 // Handle authentication errors (401, 403, etc.)
                 if (res.statusCode === 401 || res.statusCode === 403) {
-                    this._handleFallbackStream(config).then(resolve);
+                    res.resume();
+                    this._handleFallbackStream(config).then(settle);
                     return;
                 }
 
                 // --- Non-streaming mode ---
                 if (!config.tokenCallback) {
+                    const decoder = new StringDecoder('utf8');
                     let rawData = '';
-                    res.on('data', d => rawData += d.toString());
+
+                    res.on('data', d => {
+                        rawData += decoder.write(d);
+                    });
+
                     res.on('end', () => {
+                        rawData += decoder.end();
+
                         try {
                             const parsed = JSON.parse(rawData);
                             if (parsed.error) {
-                                this._handleFallbackStream(config).then(resolve);
+                                this._handleFallbackStream(config).then(settle);
                                 return;
                             }
+
                             const content = parsed.choices?.[0]?.message?.content || '';
+
                             if (this.Log && parsed.usage) {
                                 console.log(`${ColorText.green(`[${brasilDateTime()}] ${config.model}(DeepInfra)`)} |${ColorText.red(` Cost : $${parsed.usage.estimated_cost?.toFixed(8) || 'N/A'}`)} | Input Tokens : ${ColorText.yellow(parsed.usage.prompt_tokens)} | Output Tokens : ${ColorText.yellow(parsed.usage.completion_tokens)}`);
                             }
-                            resolve({
+
+                            settle({
                                 full_text: content,
                                 metadata: {
                                     usage: parsed.usage,
@@ -248,71 +258,105 @@ class DeepInfra {
                                 }
                             });
                         } catch (err) {
-                            this._handleFallbackStream(config).then(resolve);
+                            this._handleFallbackStream(config).then(settle);
                         }
                     });
+
+                    res.on('error', () => {
+                        this._handleFallbackStream(config).then(settle);
+                    });
+
                     return;
                 }
 
                 // --- Streaming mode ---
-                res.on('data', d => {
-                    buffer += d.toString();
-                    let newlineIndex = buffer.indexOf('\n');
-                    while (newlineIndex !== -1) {
-                        let line = buffer.substring(0, newlineIndex);
-                        buffer = buffer.substring(newlineIndex + 1);
-                        newlineIndex = buffer.indexOf('\n');
+                const decoder = new StringDecoder('utf8');
+                let buffer = '';
+                let fullResponse = '';
+                let usageData = null;
+                let streamId = null;
+                let streamCreated = null;
+                let streamModel = null;
 
-                        // Remove "data: " prefix if present
-                        if (line.startsWith('data: ')) {
-                            line = line.substring(6);
-                        }
+                const processLine = (line) => {
+                    line = line.trim();
 
-                        line = line.trim();
-                        if (!line || line === '[DONE]') continue;
+                    if (line.startsWith('data: ')) {
+                        line = line.substring(6);
+                    }
 
-                        try {
-                            const parsed = JSON.parse(line);
+                    line = line.trim();
+                    if (!line || line === '[DONE]') return;
 
-                            // Capture stream metadata from first chunk
-                            if (!streamId && parsed.id) streamId = parsed.id;
-                            if (!streamCreated && parsed.created) streamCreated = parsed.created;
-                            if (!streamModel && parsed.model) streamModel = parsed.model;
+                    try {
+                        const parsed = JSON.parse(line);
 
-                            // Capture usage if present (usually final chunk)
-                            if (parsed.usage) {
-                                usageData = parsed.usage;
-                                continue; // no content in this chunk
-                            }
+                        // Capture stream metadata from first chunk
+                        if (!streamId && parsed.id) streamId = parsed.id;
+                        if (!streamCreated && parsed.created) streamCreated = parsed.created;
+                        if (!streamModel && parsed.model) streamModel = parsed.model;
 
-                            const choice = parsed.choices?.[0];
-                            if (!choice) continue;
+                        const choice = parsed.choices?.[0];
 
+                        // Process content BEFORE checking usage. Some providers may send
+                        // usage and the last content token in the same SSE event.
+                        if (choice) {
                             const delta = choice.delta;
                             if (delta?.content) {
                                 const tokenText = delta.content;
                                 fullResponse += tokenText;
                                 config.tokenCallback({
-                                    full_text: fullResponse,
                                     stream: {
                                         content: tokenText,
-                                        token: { text: tokenText }, // mimic old structure
                                         finish_reason: choice.finish_reason
                                     }
                                 });
                             }
-                        } catch (e) {
-                            // Ignore parse errors for incomplete lines
                         }
+
+                        // Capture usage data for logging/cost
+                        if (parsed.usage) {
+                            usageData = parsed.usage;
+                        }
+                    } catch (e) {
+                        // Ignore malformed/incomplete SSE data lines
                     }
+                };
+
+                const processBuffer = (flush = false) => {
+                    let newlineIndex = buffer.indexOf('\n');
+
+                    while (newlineIndex !== -1) {
+                        const line = buffer.substring(0, newlineIndex);
+                        buffer = buffer.substring(newlineIndex + 1);
+                        newlineIndex = buffer.indexOf('\n');
+                        processLine(line);
+                    }
+
+                    // NUCLEAR KLUDGE:
+                    // The final SSE line sometimes arrives without a trailing newline.
+                    // If we don't flush it here, the last token is lost/cut.
+                    if (flush && buffer.trim()) {
+                        processLine(buffer);
+                        buffer = '';
+                    }
+                };
+
+                res.on('data', d => {
+                    buffer += decoder.write(d);
+                    processBuffer(false);
                 });
 
                 res.on('end', () => {
-                    // Log cost if usage was received and logging is enabled
+                    buffer += decoder.end();
+                    // Flush any remaining buffered data before resolving.
+                    processBuffer(true);
+
                     if (this.Log && usageData) {
                         console.log(`${ColorText.green(`[${brasilDateTime()}] ${config.model}(DeepInfra)`)} |${ColorText.red(` Cost : $${usageData.estimated_cost?.toFixed(8) || 'N/A'}`)} | Input Tokens : ${ColorText.yellow(usageData.prompt_tokens)} | Output Tokens : ${ColorText.yellow(usageData.completion_tokens)}`);
                     }
-                    resolve({
+
+                    settle({
                         full_text: fullResponse,
                         metadata: {
                             streamed: true,
@@ -323,10 +367,14 @@ class DeepInfra {
                         }
                     });
                 });
+
+                res.on('error', () => {
+                    this._handleFallbackStream(config).then(settle);
+                });
             });
 
             req.on('error', error => {
-                this._handleFallbackStream(config).then(resolve);
+                this._handleFallbackStream(config).then(settle);
             });
 
             req.write(JSON.stringify(requestBody));

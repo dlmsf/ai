@@ -404,7 +404,6 @@ class NovitaAI {
                 const streamNext = () => {
                     if (i < tokens.length) {
                         config.tokenCallback({ 
-                            full_text: fullText.substring(0, fullText.indexOf(tokens[i]) + tokens[i].length),
                             stream: { content: tokens[i] } 
                         });
                         i++;
@@ -572,10 +571,8 @@ class NovitaAI {
                                 const tokenText = delta.content;
                                 fullResponse += tokenText;
                                 config.tokenCallback({
-                                    full_text: fullResponse,
                                     stream: {
                                         content: tokenText,
-                                        token: { text: tokenText },
                                         finish_reason: choice.finish_reason
                                     }
                                 });

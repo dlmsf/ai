@@ -107,7 +107,7 @@ class ColorText {
  * await deepseek.Chat([
  *   { role: 'user', content: 'Tell me a story' }
  * ], {
- *   tokenCallback: ({ full_text, stream }) => {
+ *   tokenCallback: ({ stream }) => {
  *     process.stdout.write(stream.content);
  *   }
  * });
@@ -232,7 +232,6 @@ class DeepSeek {
                 const streamNext = () => {
                     if (i < tokens.length) {
                         config.tokenCallback({ 
-                            full_text: fullText.substring(0, fullText.indexOf(tokens[i]) + tokens[i].length),
                             stream: { content: tokens[i] } 
                         });
                         i++;
@@ -322,7 +321,7 @@ class DeepSeek {
      * @param {Object} [config={}] - Configuration options for the chat completion.
      * @param {string} [config.model] - The model to use (overrides the instance default).
      * @param {string} [config.system_prompt] - System prompt to prepend to the conversation.
-     * @param {Function} [config.tokenCallback] - Callback function for streaming mode. Receives an object with `full_text` and `stream` properties.
+     * @param {Function} [config.tokenCallback] - Callback function for streaming mode. Receives an object with `stream` property.
      * @param {number} [config.max_tokens] - Maximum number of tokens to generate in the completion.
      * @param {number} [config.temperature] - What sampling temperature to use, between 0 and 2. Higher values make output more random.
      * @param {number} [config.top_p] - Nucleus sampling parameter. Only tokens with top_p probability mass are considered.
@@ -360,9 +359,8 @@ class DeepSeek {
      * await deepseek.Chat([
      *   { role: 'user', content: 'Write a poem' }
      * ], {
-     *   tokenCallback: ({ full_text, stream }) => {
+     *   tokenCallback: ({ stream }) => {
      *     process.stdout.write(stream.content);
-     *     fullResponse = full_text;
      *   }
      * });
      * 
@@ -534,10 +532,8 @@ class DeepSeek {
                                 const tokenText = delta.content;
                                 fullResponse += tokenText;
                                 config.tokenCallback({
-                                    full_text: fullResponse,
                                     stream: {
                                         content: tokenText,
-                                        token: { text: tokenText }, // mimic old structure
                                         finish_reason: choice.finish_reason
                                     }
                                 });
