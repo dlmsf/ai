@@ -44,6 +44,16 @@ async function streamDefaultErrorMessage(onData) {
   });
 }
 
+function extractPartialText(streamLog) {
+  return streamLog.map(entry => {
+    if (entry.stream && typeof entry.stream.content === 'string') return entry.stream.content;
+    if (typeof entry.content === 'string') return entry.content;
+    if (entry.choices?.[0]?.delta?.content) return entry.choices[0].delta.content;
+    if (entry.choices?.[0]?.message?.content) return entry.choices[0].message.content;
+    return '';
+  }).join('');
+}
+
 function attemptRequest({
   serverUrl,
   port,
@@ -90,8 +100,7 @@ function attemptRequest({
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(postData)
-      },
-      timeout: 120000
+      }
     };
     
     if (token) {
@@ -169,13 +178,22 @@ function attemptRequest({
       });
     });
 
-    req.on('error', (error) => {
-      reject(error);
+    req.on('socket', (socket) => {
+      if (socket.connecting) {
+        socket.setTimeout(30000); // 30s to establish TCP connection
+        socket.once('connect', () => {
+          socket.setTimeout(0); // no timeout once connected
+        });
+        socket.once('timeout', () => {
+          req.destroy(new Error('Connection timeout'));
+        });
+      } else {
+        socket.setTimeout(0);
+      }
     });
 
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Request timeout'));
+    req.on('error', (error) => {
+      reject(error);
     });
 
     req.write(postData);
@@ -241,6 +259,17 @@ function consumeGenerateRoute({
       } catch (error) {
         cleanup();
         lastError = error;
+        
+        // If we already received streaming tokens, finish with partial text
+        if (streamLog.length > 0) {
+          const partialText = extractPartialText(streamLog);
+          const partialResult = { full_text: partialText };
+          if (isStreaming) {
+            partialResult.streamLog = streamLog;
+          }
+          resolve(partialResult);
+          return;
+        }
         
         if (error.responseBody) {
           resolve(error.responseBody);
