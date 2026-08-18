@@ -92,6 +92,8 @@ class ChatView {
               border-radius: 10px;
               background: #e7e7e7;
               white-space: pre-wrap;
+              position: relative;
+              padding-bottom: 35px; /* Add space for copy button */
           }
           .user-message {
               background: #0078d7;
@@ -102,6 +104,35 @@ class ChatView {
               background: #58a700;
               color: #fff;
           }
+          
+          /* NEW CSS FOR MESSAGE COPY BUTTON */
+          .message-copy-button {
+              position: absolute;
+              bottom: 5px;
+              right: 5px;
+              background: rgba(255, 255, 255, 0.2);
+              color: white;
+              border: 1px solid rgba(255, 255, 255, 0.3);
+              padding: 3px 8px;
+              border-radius: 3px;
+              cursor: pointer;
+              font-size: 11px;
+              transition: background-color 0.3s, opacity 0.3s;
+              opacity: 0;
+              z-index: 5;
+          }
+          .message:hover .message-copy-button {
+              opacity: 1;
+          }
+          .message-copy-button:hover {
+              background: rgba(255, 255, 255, 0.4);
+          }
+          .message-copy-button.copied {
+              background: #4caf50;
+              border-color: #4caf50;
+              opacity: 1;
+          }
+          /* END OF NEW CSS */
           
           /* UPDATED CSS FOR STICKY COPY BUTTON */
           .code-block {
@@ -274,6 +305,27 @@ class ChatView {
               });
           }
           
+          // NEW FUNCTION TO ADD COPY BUTTON TO MESSAGE
+          function addMessageCopyButton(messageDiv) {
+              const copyButton = document.createElement('button');
+              copyButton.className = 'message-copy-button';
+              copyButton.textContent = 'Copy';
+              copyButton.onclick = function(e) {
+                  e.stopPropagation();
+                  const messageContent = messageDiv.innerText || messageDiv.textContent;
+                  navigator.clipboard.writeText(messageContent).then(function() {
+                      copyButton.textContent = 'Copied!';
+                      copyButton.classList.add('copied');
+                      setTimeout(function() {
+                          copyButton.textContent = 'Copy';
+                          copyButton.classList.remove('copied');
+                      }, 2000);
+                  });
+              };
+              messageDiv.appendChild(copyButton);
+          }
+          // END OF NEW FUNCTION
+          
           function detectAndFormatCode(text) {
               const fragments = [];
               let currentIndex = 0;
@@ -407,6 +459,10 @@ class ChatView {
                       messageDiv.appendChild(textNode);
                   }
               });
+              
+              // ADD COPY BUTTON AFTER RENDERING CONTENT
+              addMessageCopyButton(messageDiv);
+              // END OF ADDITION
           }
           
           function sendMessage() {
@@ -526,6 +582,9 @@ class ChatView {
               msgDiv.classList.add('message', 'user-message');
               msgDiv.textContent = text;
               chatMessages.appendChild(msgDiv);
+              // ADD COPY BUTTON FOR USER MESSAGES
+              addMessageCopyButton(msgDiv);
+              // END OF ADDITION
               scrollToBottom();
             }
           }
