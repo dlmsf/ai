@@ -272,6 +272,9 @@ class ChatView {
           let isAutoScrollLocked = true;
           let aiFullContent = '';
           
+          // Store the original content with markdown for each message
+          let messageContentMap = new Map();
+          
           // Auto-scroll lock mechanism
           const chatMessages = document.getElementById('chat-messages');
           const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
@@ -306,14 +309,15 @@ class ChatView {
           }
           
           // NEW FUNCTION TO ADD COPY BUTTON TO MESSAGE
-          function addMessageCopyButton(messageDiv) {
+          function addMessageCopyButton(messageDiv, originalContent) {
               const copyButton = document.createElement('button');
               copyButton.className = 'message-copy-button';
               copyButton.textContent = 'Copy';
               copyButton.onclick = function(e) {
                   e.stopPropagation();
-                  const messageContent = messageDiv.innerText || messageDiv.textContent;
-                  navigator.clipboard.writeText(messageContent).then(function() {
+                  // Use the original content with markdown if available
+                  const contentToCopy = originalContent || messageDiv.innerText || messageDiv.textContent;
+                  navigator.clipboard.writeText(contentToCopy).then(function() {
                       copyButton.textContent = 'Copied!';
                       copyButton.classList.add('copied');
                       setTimeout(function() {
@@ -460,8 +464,8 @@ class ChatView {
                   }
               });
               
-              // ADD COPY BUTTON AFTER RENDERING CONTENT
-              addMessageCopyButton(messageDiv);
+              // ADD COPY BUTTON WITH ORIGINAL CONTENT
+              addMessageCopyButton(messageDiv, content);
               // END OF ADDITION
           }
           
@@ -582,8 +586,8 @@ class ChatView {
               msgDiv.classList.add('message', 'user-message');
               msgDiv.textContent = text;
               chatMessages.appendChild(msgDiv);
-              // ADD COPY BUTTON FOR USER MESSAGES
-              addMessageCopyButton(msgDiv);
+              // ADD COPY BUTTON WITH ORIGINAL TEXT
+              addMessageCopyButton(msgDiv, text);
               // END OF ADDITION
               scrollToBottom();
             }
