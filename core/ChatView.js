@@ -93,7 +93,7 @@ class ChatView {
               background: #e7e7e7;
               white-space: pre-wrap;
               position: relative;
-              padding-bottom: 35px; /* Add space for copy button */
+              padding-bottom: 35px;
           }
           .user-message {
               background: #0078d7;
@@ -105,7 +105,6 @@ class ChatView {
               color: #fff;
           }
           
-          /* NEW CSS FOR MESSAGE COPY BUTTON */
           .message-copy-button {
               position: absolute;
               bottom: 5px;
@@ -132,16 +131,14 @@ class ChatView {
               border-color: #4caf50;
               opacity: 1;
           }
-          /* END OF NEW CSS */
           
-          /* UPDATED CSS FOR STICKY COPY BUTTON */
           .code-block {
               margin: 10px 0;
               border-radius: 8px;
               background: #1e1e1e;
               color: #d4d4d4;
               font-family: 'Courier New', monospace;
-              border: 1px solid #444; /* Added explicit border instead of overflow:hidden */
+              border: 1px solid #444;
           }
           .code-header {
               display: flex;
@@ -150,13 +147,12 @@ class ChatView {
               background: #2d2d2d;
               padding: 5px 10px;
               border-bottom: 1px solid #444;
-              position: sticky; /* Makes the header and copy button always visible */
+              position: sticky;
               top: 0;
               z-index: 10;
               border-top-left-radius: 7px;
               border-top-right-radius: 7px;
           }
-          /* END OF UPDATED CSS */
   
           .code-language-label {
               color: #888;
@@ -165,7 +161,6 @@ class ChatView {
               text-transform: uppercase;
           }
   
-          /* UPDATED CSS FOR BORDER RADIUS */
           .code-content {
               padding: 15px;
               margin: 0;
@@ -178,7 +173,6 @@ class ChatView {
               border-bottom-left-radius: 7px;
               border-bottom-right-radius: 7px;
           }
-          /* END OF UPDATED CSS */
   
           .copy-button {
               background: #0078d7;
@@ -272,10 +266,8 @@ class ChatView {
           let isAutoScrollLocked = true;
           let aiFullContent = '';
           
-          // Store the original content with markdown for each message
           let messageContentMap = new Map();
           
-          // Auto-scroll lock mechanism
           const chatMessages = document.getElementById('chat-messages');
           const scrollToBottomBtn = document.getElementById('scrollToBottomBtn');
           
@@ -308,14 +300,12 @@ class ChatView {
               });
           }
           
-          // NEW FUNCTION TO ADD COPY BUTTON TO MESSAGE
           function addMessageCopyButton(messageDiv, originalContent) {
               const copyButton = document.createElement('button');
               copyButton.className = 'message-copy-button';
               copyButton.textContent = 'Copy';
               copyButton.onclick = function(e) {
                   e.stopPropagation();
-                  // Use the original content with markdown if available
                   const contentToCopy = originalContent || messageDiv.innerText || messageDiv.textContent;
                   navigator.clipboard.writeText(contentToCopy).then(function() {
                       copyButton.textContent = 'Copied!';
@@ -328,7 +318,6 @@ class ChatView {
               };
               messageDiv.appendChild(copyButton);
           }
-          // END OF NEW FUNCTION
           
           function detectAndFormatCode(text) {
               const fragments = [];
@@ -374,7 +363,31 @@ class ChatView {
                       codeStartIndex = codeBlockStart + 3;
                   }
                   
-                  const codeBlockEnd = text.indexOf(backtick3, codeStartIndex);
+                  // Find the closing fence intelligently
+                  let codeBlockEnd = -1;
+                  let searchIndex = codeStartIndex;
+                  
+                  while (searchIndex < text.length) {
+                      const potentialEnd = text.indexOf(backtick3, searchIndex);
+                      if (potentialEnd === -1) {
+                          break;
+                      }
+                      
+                      // Check if this is a proper closing fence (at start of line)
+                      const lineStart = text.lastIndexOf('\n', potentialEnd - 1);
+                      const beforeFence = text.substring(lineStart + 1, potentialEnd);
+                      
+                      if (/^\s*$/.test(beforeFence)) {
+                          const afterFence = text.substring(potentialEnd + 3, potentialEnd + 4);
+                          
+                          if (afterFence === '' || afterFence === '\n' || afterFence === '\r') {
+                              codeBlockEnd = potentialEnd;
+                              break;
+                          }
+                      }
+                      
+                      searchIndex = potentialEnd + 3;
+                  }
                   
                   if (codeBlockEnd === -1) {
                       fragments.push({
@@ -422,17 +435,10 @@ class ChatView {
                       const header = document.createElement('div');
                       header.className = 'code-header';
                       
-                      if (fragment.language) {
-                          const langLabel = document.createElement('span');
-                          langLabel.className = 'code-language-label';
-                          langLabel.textContent = fragment.language;
-                          header.appendChild(langLabel);
-                      } else {
-                          const langLabel = document.createElement('span');
-                          langLabel.className = 'code-language-label';
-                          langLabel.textContent = 'code';
-                          header.appendChild(langLabel);
-                      }
+                      const langLabel = document.createElement('span');
+                      langLabel.className = 'code-language-label';
+                      langLabel.textContent = fragment.language || 'code';
+                      header.appendChild(langLabel);
                       
                       const copyButton = document.createElement('button');
                       copyButton.className = 'copy-button';
@@ -464,9 +470,7 @@ class ChatView {
                   }
               });
               
-              // ADD COPY BUTTON WITH ORIGINAL CONTENT
               addMessageCopyButton(messageDiv, content);
-              // END OF ADDITION
           }
           
           function sendMessage() {
@@ -586,9 +590,7 @@ class ChatView {
               msgDiv.classList.add('message', 'user-message');
               msgDiv.textContent = text;
               chatMessages.appendChild(msgDiv);
-              // ADD COPY BUTTON WITH ORIGINAL TEXT
               addMessageCopyButton(msgDiv, text);
-              // END OF ADDITION
               scrollToBottom();
             }
           }
